@@ -92,4 +92,54 @@ app.get("/token-scope", async (req, res) => {
   }
 });
 
+app.post("/check-scope", async (req, res) => {
+  try {
+    const { contract, message } = req.body;
+    if (!contract || !message) {
+      return res.status(400).json({ error: "contract and message are required" });
+    }
+
+    const prompt = `You are an assistant that protects freelancers from scope creep.
+Compare the client's message against the contract and decide if the request is covered.
+If the contract states an hourly rate, use it to price extra work. Otherwise estimate a fair price.
+
+CONTRACT:
+${contract}
+
+CLIENT MESSAGE:
+${message}
+
+Reply with JSON only, in exactly this shape:
+{"in_scope": true or false, "reason": "one or two sentences", "extra_work": "short description of the extra work, or an empty string if in scope", "hours": number, "suggested_price_usd": number}
+If the request is in scope, use 0 for hours and suggested_price_usd.`;
+
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/" +
+        process.env.GEMINI_MODEL +
+        ":generateContent",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": process.env.GEMINI_API_KEY,
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" },
+        }),
+      }
+    );
+
+    const data = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json(data);
+    }
+
+    const text = data.candidates[0].content.parts[0].text;
+    res.json(JSON.parse(text));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(3000, () => console.log("Server running on port 3000"));
