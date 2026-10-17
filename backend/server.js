@@ -65,32 +65,7 @@ ${message}
 Reply with JSON only, in exactly this shape:
 {"in_scope": true or false, "reason": "one or two sentences", "extra_work": "short description of the extra work, or an empty string if in scope", "hours": number, "suggested_price_usd": number}
 If the request is in scope, use 0 for hours and suggested_price_usd.`;
-
-  const models = [
-    process.env.GEMINI_MODEL,
-    process.env.GEMINI_FALLBACK_MODEL,
-  ].filter(Boolean);
-  let lastError = "Gemini request failed";
-
-  for (const model of models) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      const result = await callGemini(model, prompt);
-
-      if (result.ok) {
-        const text = result.data.candidates[0].content.parts[0].text;
-        return JSON.parse(text);
-      }
-
-      lastError = "Gemini error: " + JSON.stringify(result.data);
-
-      if (result.status !== 503 && result.status !== 429) {
-        throw new Error(lastError);
-      }
-      await sleep(attempt * 2000);
-    }
-  }
-
-  throw new Error(lastError);
+return await askGemini(prompt);
 }
 
 async function createDraftInvoice(scope, clientEmail) {
@@ -222,6 +197,93 @@ app.get("/invoice-status/:id", async (req, res) => {
       due_date: data.detail?.payment_term?.due_date,
       total: data.amount?.value,
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+async function askGemini(prompt) {
+  const models = [
+    process.env.GEMINI_MODEL,
+    process.env.GEMINI_FALLBACK_MODEL,
+  ].filter(Boolean);
+  let lastError = "Gemini request failed";
+
+  for (const model of models) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const result = await callGemini(model, prompt);
+
+      if (result.ok) {
+        return JSON.parse(result.data.candidates[0].content.parts[0].text);
+      }
+
+      lastError = "Gemini error: " + JSON.stringify(result.data);
+      if (result.status !== 503 && result.status !== 429) {
+        throw new Error(lastError);
+      }
+      await sleep(attempt * 2000);
+    }
+  }
+
+  throw new Error(lastError);
+}
+
+app.post("/draft-reminder", async (req, res) => {
+  try {
+    const { invoice_id, level, freelancer_name, client_name } = req.body || {};
+    if (!invoice_id) {
+      return res.status(400).json({ error: "invoice_id is required" });
+    }
+
+    const token = await getAccessToken();
+    const response = await fetch(
+      BASE_URL + "/v2/invoicing/invoices/" + invoice_id,
+      { headers: { Authorization: "Bearer " + token } }
+    );
+    const invoice = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json(invoice);
+    }
+
+    if (invoice.status === "PAID" || invoice.status === "MARKED_AS_PAID") {
+      return res.json({ needed: false, message: "Invoice is already paid" });
+    }
+    if (invoice.status === "DRAFT") {
+      return res.status(400).json({ error: "Invoice has not been sent yet" });
+    }
+
+    const stage = [1, 2, 3].includes(Number(level)) ? Number(level) : 1;
+    const tones = {
+      1: "a friendly, short reminder that assumes the client simply forgot",
+      2: "a firm but polite follow-up that says the invoice is overdue and asks for payment within 7 days",
+      3: "a polite message offering to split the remaining amount into 2 or 3 equal installments if the client replies to agree, while still asking for a decision soon",
+    };
+
+    const amount = invoice.amount?.value;
+    const currency = invoice.amount?.currency_code;
+    const dueDate = invoice.detail?.payment_term?.due_date || "not specified";
+    const invoiceNumber = invoice.detail?.invoice_number;
+    const item = invoice.items?.[0]?.name;
+    const payLink = invoice.detail?.metadata?.recipient_view_url || "";
+
+    const prompt = `Write an email from a freelancer to a client about an unpaid invoice.
+Style: ${tones[stage]}.
+Always stay professional and respectful. Never threaten legal action, fees or penalties.
+Use only the facts below. Do not invent dates, amounts or fees.
+
+Freelancer name: ${freelancer_name || "[Your name]"}
+Client name: ${client_name || "there"}
+Invoice number: ${invoiceNumber}
+Work billed: ${item}
+Amount: ${amount} ${currency}
+Due date: ${dueDate}
+Payment link: ${payLink}
+
+Reply with JSON only, in exactly this shape:
+{"subject": "email subject line", "body": "the full email text"}`;
+
+    const email = await askGemini(prompt);
+    res.json({ needed: true, stage, invoice_status: invoice.status, ...email });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
