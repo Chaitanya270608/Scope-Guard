@@ -174,4 +174,57 @@ app.post("/change-order", async (req, res) => {
   }
 });
 
+app.post("/send-invoice", async (req, res) => {
+  try {
+    const { invoice_id } = req.body;
+    if (!invoice_id) {
+      return res.status(400).json({ error: "invoice_id is required" });
+    }
+
+    const token = await getAccessToken();
+    const response = await fetch(
+      BASE_URL + "/v2/invoicing/invoices/" + invoice_id + "/send",
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ send_to_recipient: true, send_to_invoicer: false }),
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return res.status(response.status).json(data);
+    }
+    res.json({ sent: true, details: data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/invoice-status/:id", async (req, res) => {
+  try {
+    const token = await getAccessToken();
+    const response = await fetch(
+      BASE_URL + "/v2/invoicing/invoices/" + req.params.id,
+      { headers: { Authorization: "Bearer " + token } }
+    );
+
+    const data = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json(data);
+    }
+
+    res.json({
+      status: data.status,
+      due_date: data.detail?.payment_term?.due_date,
+      total: data.amount?.value,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(3000, () => console.log("Server running on port 3000"));
