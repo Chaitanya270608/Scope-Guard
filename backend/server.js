@@ -291,4 +291,22 @@ Reply with JSON only, in exactly this shape:
   }
 });
 
+app.post("/create-invoice", async (req, res) => {
+  try {
+    const { extra_work, hours, reason, price, client_email } = req.body || {};
+    if (!extra_work || !price) {
+      return res.status(400).json({ error: "extra_work and price are required" });
+    }
+
+    const clientEmail = client_email || process.env.TEST_CLIENT_EMAIL;
+    const invoice = await createDraftInvoice(
+      { extra_work, hours, reason, suggested_price_usd: price },
+      clientEmail
+    );
+    res.json({ invoice });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(3000, () => console.log("Server running on port 3000"));
