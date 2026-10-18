@@ -130,16 +130,22 @@ export default function App() {
       {busy && <p>{busy}</p>}
       {error && <p style={{ color: "red" }}>{error}</p>}
 
-      {scope && scope.in_scope && (
-        <p style={{ color: "green" }}>
-          In scope: {scope.reason} No invoice needed.
-        </p>
+       {scope && scope.in_scope && (
+        <div style={{ color: "green" }}>
+          <p>In scope: {scope.reason} No invoice needed.</p>
+          {scope.contract_clause && (
+            <p><em>Contract says: {scope.contract_clause}</em></p>
+          )}
+          <p>Confidence: {scope.confidence}</p>
+        </div>
       )}
 
       {scope && !scope.in_scope && (
         <div style={{ border: "1px solid #ccc", padding: 16, marginTop: 16 }}>
           <h3>Out of scope</h3>
           <p>{scope.reason}</p>
+          {scope.contract_clause && <p><em>Contract says: {scope.contract_clause}</em></p>}
+          <p>Confidence: {scope.confidence}</p>
           <p>Extra work: {scope.extra_work}</p>
           <p>AI estimate: {scope.hours} hours</p>
 
