@@ -95,7 +95,7 @@ async function createDraftInvoice(scope, clientEmail) {
     body: JSON.stringify({
       detail: {
         currency_code: "USD",
-        note: "Change order: " + scope.reason,
+        note: "Change order for additional work requested outside the original agreement.",
       },
       primary_recipients: [{ billing_info: { email_address: clientEmail } }],
       items: [
