@@ -101,7 +101,10 @@ async function createDraftInvoice(scope, clientEmail) {
       items: [
         {
           name: scope.extra_work,
-          description: "Estimated " + scope.hours + " hours of additional work",
+          description:
+            Number(scope.hours) > 0
+              ? "Estimated " + scope.hours + " hours of additional work"
+              : "Additional work requested by the client",
           quantity: "1",
           unit_amount: { currency_code: "USD", value: price.toFixed(2) },
         },

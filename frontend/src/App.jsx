@@ -18,10 +18,14 @@ async function api(path, body) {
   return data;
 }
 
+const box = { border: "1px solid #ccc", padding: 16, marginTop: 16 };
+
 export default function App() {
   const [contract, setContract] = useState("");
   const [message, setMessage] = useState("");
   const [scope, setScope] = useState(null);
+  const [override, setOverride] = useState(false);
+  const [work, setWork] = useState("");
   const [price, setPrice] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [sent, setSent] = useState(false);
@@ -47,22 +51,28 @@ export default function App() {
   function handleCheck() {
     run("Checking...", async () => {
       setScope(null);
+      setOverride(false);
+      setWork("");
+      setPrice("");
       setInvoiceId("");
       setSent(false);
       setStatus(null);
       setReminder(null);
       const data = await api("/check-scope", { contract, message });
       setScope(data);
-      setPrice(String(data.suggested_price_usd));
+      setWork(data.extra_work || "");
+      setPrice(data.suggested_price_usd > 0 ? String(data.suggested_price_usd) : "");
     });
   }
 
   function handleCreate() {
     run("Creating...", async () => {
       const data = await api("/create-invoice", {
-        extra_work: scope.extra_work,
+        extra_work: work,
         hours: scope.hours,
-        reason: scope.reason,
+        reason: override
+          ? "Additional work requested by the client"
+          : scope.reason,
         price: Number(price),
       });
       setInvoiceId(data.invoice.invoice_id);
@@ -95,6 +105,8 @@ export default function App() {
       );
     });
   }
+
+  const showForm = scope && (!scope.in_scope || override);
 
   return (
     <div style={{ maxWidth: 700, margin: "40px auto", fontFamily: "sans-serif" }}>
@@ -130,57 +142,69 @@ export default function App() {
       {busy && <p>{busy}</p>}
       {error && <p style={{ color: "red" }}>{error}</p>}
 
-       {scope && scope.in_scope && (
-        <div style={{ color: "green" }}>
-          <p>In scope: {scope.reason} No invoice needed.</p>
+      {scope && (
+        <div style={box}>
+          <h3>{scope.in_scope ? "In scope" : "Out of scope"}</h3>
+          <p>{scope.reason}</p>
           {scope.contract_clause && (
-            <p><em>Contract says: {scope.contract_clause}</em></p>
+            <p>
+              <em>Contract says: {scope.contract_clause}</em>
+            </p>
           )}
           <p>Confidence: {scope.confidence}</p>
           {scope.confidence !== "high" && (
-            <p style={{ color: "orange" }}>Borderline case: please review before billing.</p>
+            <p style={{ color: "orange" }}>
+              Borderline case: please review before billing.
+            </p>
+          )}
+          {scope.in_scope && !override && !invoiceId && (
+            <button onClick={() => setOverride(true)} disabled={!!busy}>
+              Bill anyway
+            </button>
           )}
         </div>
       )}
 
-      {scope && !scope.in_scope && (
-        <div style={{ border: "1px solid #ccc", padding: 16, marginTop: 16 }}>
-          <h3>Out of scope</h3>
-          <p>{scope.reason}</p>
-          {scope.contract_clause && <p><em>Contract says: {scope.contract_clause}</em></p>}
-          <p>Confidence: {scope.confidence}</p>
-          {scope.confidence !== "high" && (
-            <p style={{ color: "orange" }}>Borderline case: please review before billing.</p>
-          )}
-          <p>Extra work: {scope.extra_work}</p>
-          <p>AI estimate: {scope.hours} hours</p>
-
-          <label>
-            Price (USD):{" "}
-            <input
-              type="number"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              disabled={!!invoiceId}
-            />
-          </label>
-
+      {showForm && (
+        <div style={box}>
+          <h3>{override ? "Bill at your discretion" : "Draft invoice"}</h3>
+          {!override && <p>AI estimate: {scope.hours} hours</p>}
+          <p>
+            <label>
+              Work:{" "}
+              <input
+                style={{ width: "70%" }}
+                value={work}
+                onChange={(e) => setWork(e.target.value)}
+                placeholder="Describe the extra work"
+                disabled={!!invoiceId}
+              />
+            </label>
+          </p>
+          <p>
+            <label>
+              Price (USD):{" "}
+              <input
+                type="number"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                disabled={!!invoiceId}
+              />
+            </label>
+          </p>
           {!invoiceId && (
-            <div>
-              <button
-                onClick={handleCreate}
-                disabled={!!busy || !(Number(price) > 0)}
-                style={{ marginTop: 12 }}
-              >
-                Create draft invoice
-              </button>
-            </div>
+            <button
+              onClick={handleCreate}
+              disabled={!!busy || !work.trim() || !(Number(price) > 0)}
+            >
+              Create draft invoice
+            </button>
           )}
         </div>
       )}
 
       {invoiceId && (
-        <div style={{ border: "1px solid #ccc", padding: 16, marginTop: 16 }}>
+        <div style={box}>
           <h3>Invoice</h3>
           <p>Draft created: {invoiceId}</p>
 
@@ -208,7 +232,7 @@ export default function App() {
       )}
 
       {sent && (
-        <div style={{ border: "1px solid #ccc", padding: 16, marginTop: 16 }}>
+        <div style={box}>
           <h3>Payment follow-up</h3>
           <input
             placeholder="Your name"
