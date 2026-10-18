@@ -137,6 +137,9 @@ export default function App() {
             <p><em>Contract says: {scope.contract_clause}</em></p>
           )}
           <p>Confidence: {scope.confidence}</p>
+          {scope.confidence !== "high" && (
+            <p style={{ color: "orange" }}>Borderline case: please review before billing.</p>
+          )}
         </div>
       )}
 
@@ -146,6 +149,9 @@ export default function App() {
           <p>{scope.reason}</p>
           {scope.contract_clause && <p><em>Contract says: {scope.contract_clause}</em></p>}
           <p>Confidence: {scope.confidence}</p>
+          {scope.confidence !== "high" && (
+            <p style={{ color: "orange" }}>Borderline case: please review before billing.</p>
+          )}
           <p>Extra work: {scope.extra_work}</p>
           <p>AI estimate: {scope.hours} hours</p>
 

@@ -44,7 +44,7 @@ async function callGemini(model, prompt) {
       },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json" },
+        generationConfig: { responseMimeType: "application/json", temperature: 0 },
       }),
     }
   );
@@ -64,8 +64,8 @@ Rules:
 - If the message contains several requests, put only the out-of-scope ones in extra_work.
 - If the contract states an hourly rate, the price must equal hours x rate. Otherwise estimate a fair price and say so in the reason.
 - If the contract is unclear about this request, set confidence to "low".
+- Do not claim the contract excludes or includes something unless a contract sentence says so or clearly implies it. If the contract is silent about the request, say that in the reason.
 - Use "high" confidence only when a specific contract sentence clearly covers or excludes the request. If you are judging from general practice because the contract does not say, use "medium" or "low".
-
 CONTRACT:
 ${contract}
 
