@@ -31,27 +31,124 @@ async function getAccessToken() {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function callGemini(model, prompt) {
+  try {
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/" +
+        model +
+        ":generateContent",
+      {
+        method: "POST",
+        signal: AbortSignal.timeout(60000),
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": process.env.GEMINI_API_KEY,
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json", temperature: 0 },
+        }),
+      }
+    );
+    const data = await response.json();
+    return { ok: response.ok, status: response.status, data };
+  } catch (err) {
+    // Timeouts and network errors come back as status 0 instead of crashing
+    return { ok: false, status: 0, data: { error: { message: err.message } } };
+  }
+}
+
+async function listGenerateContentModels() {
   const response = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/" +
-      model +
-      ":generateContent",
+    "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
     {
-      method: "POST",
-      signal: AbortSignal.timeout(20000),
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": process.env.GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0 },
-      }),
+      headers: { "x-goog-api-key": process.env.GEMINI_API_KEY },
+      signal: AbortSignal.timeout(15000),
     }
   );
-
   const data = await response.json();
-  return { ok: response.ok, status: response.status, data };
+  if (!response.ok) {
+    throw new Error("ListModels error: " + JSON.stringify(data));
+  }
+  return (data.models || [])
+    .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
+    .map((m) => m.name.replace(/^models\//, ""));
 }
+
+function pickDefaultModels(names) {
+  const version = (n) => parseFloat(n.split("-")[1]) || 0;
+  const byVersion = (a, b) => version(b) - version(a);
+  const flash = names.filter((n) => /^gemini-[\d.]+-flash$/.test(n)).sort(byVersion);
+  const lite = names.filter((n) => /^gemini-[\d.]+-flash-lite$/.test(n)).sort(byVersion);
+  return [...flash, ...lite].slice(0, 3);
+}
+
+let workingModel = null;
+
+async function askGemini(prompt) {
+  const deadline = Date.now() + 90000;
+  const tried = new Set();
+  let lastError = "Gemini request failed";
+
+  async function tryModel(model) {
+    tried.add(model);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      if (Date.now() > deadline) return undefined;
+      const result = await callGemini(model, prompt);
+
+      if (result.ok) {
+        if (workingModel !== model) console.log("Using Gemini model:", model);
+        workingModel = model;
+        return JSON.parse(result.data.candidates[0].content.parts[0].text);
+      }
+
+      lastError = "Gemini error (" + model + "): " + JSON.stringify(result.data);
+
+      if (result.status === 404) {
+        if (workingModel === model) workingModel = null;
+        return undefined; // wrong model name: move on to the next one
+      }
+      const retryable =
+        result.status === 503 || result.status === 429 || result.status === 0;
+      if (!retryable) throw new Error(lastError);
+
+      await sleep(attempt * 1500);
+    }
+    return undefined;
+  }
+
+  const configured = [
+    workingModel,
+    process.env.GEMINI_MODEL,
+    process.env.GEMINI_FALLBACK_MODEL,
+  ]
+    .filter(Boolean)
+    .map((m) => m.replace(/^models\//, ""));
+
+  for (const model of new Set(configured)) {
+    const answer = await tryModel(model);
+    if (answer) return answer;
+  }
+
+  // Configured models failed: ask Google which models this key can use
+  if (Date.now() < deadline) {
+    const discovered = pickDefaultModels(await listGenerateContentModels());
+    for (const model of discovered) {
+      if (tried.has(model)) continue;
+      const answer = await tryModel(model);
+      if (answer) return answer;
+    }
+  }
+
+  throw new Error(lastError);
+}
+
+app.get("/list-models", async (req, res) => {
+  try {
+    res.json({ models: await listGenerateContentModels() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 async function checkScope(contract, message) {
   const prompt = `You are an assistant that protects freelancers from scope creep.
@@ -214,32 +311,6 @@ app.get("/invoice-status/:id", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-async function askGemini(prompt) {
-  const models = [
-    process.env.GEMINI_MODEL,
-    process.env.GEMINI_FALLBACK_MODEL,
-  ].filter(Boolean);
-  let lastError = "Gemini request failed";
-
-  for (const model of models) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      const result = await callGemini(model, prompt);
-
-      if (result.ok) {
-        return JSON.parse(result.data.candidates[0].content.parts[0].text);
-      }
-
-      lastError = "Gemini error: " + JSON.stringify(result.data);
-      if (result.status !== 503 && result.status !== 429) {
-        throw new Error(lastError);
-      }
-      await sleep(attempt * 2000);
-    }
-  }
-
-  throw new Error(lastError);
-}
 
 app.post("/draft-reminder", async (req, res) => {
   try {
