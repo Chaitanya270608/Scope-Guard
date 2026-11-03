@@ -1,6 +1,10 @@
 require("dotenv").config();
 const cors = require("cors");
 const express = require("express");
+const FREELANCER = {
+  name: process.env.FREELANCER_NAME || "Independent Professional",
+  hourlyRate: process.env.FREELANCER_RATE || 50, 
+};
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -191,7 +195,7 @@ async function createDraftInvoice(scope, clientEmail) {
         name: scope.extra_work,
         description: "Additional work: " + hours + " hours",
         quantity: String(hours),
-        unit_amount: { currency_code: "USD", value: rate.toFixed(2) },
+        unit_amount: { currency_code: "USD", value: Number(FREELANCER.hourlyRate).toFixed(2) },
         unit_of_measure: "HOURS",
       }
     : {
@@ -217,6 +221,15 @@ async function createDraftInvoice(scope, clientEmail) {
         currency_code: "USD",
         note: "Change order for additional work requested outside the original agreement.",
         payment_term: { term_type: "NET_15" },
+      },
+      configuration: {
+        partial_payment: {
+          allow_partial_payment: true,
+          minimum_amount_due: {
+            currency_code: "USD",
+            value: "50.00" 
+          }
+        }
       },
       primary_recipients: [{ billing_info: { email_address: clientEmail } }],
       items: [item],
@@ -371,6 +384,8 @@ Style: ${tones[stage]}.
 Always stay professional and respectful. Never threaten legal action, fees or penalties.
 Use only the facts below. Do not invent dates, amounts or fees.
 Start the email with the greeting line, and end it with "Best regards," followed by the sign-off name on a new line.
+CRITICAL INSTRUCTION: Sign the email off exactly as "${FREELANCER.name}". 
+  Do NOT use any placeholders like "[Your name]" or "[Freelancer Name]".
 
 Today's date: ${new Date().toISOString().slice(0, 10)}
 Greeting line (use exactly): ${greeting}
