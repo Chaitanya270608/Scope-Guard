@@ -181,6 +181,29 @@ async function createDraftInvoice(scope, clientEmail) {
     throw new Error("AI did not return a valid price");
   }
 
+  const hours = Number(scope.hours);
+  const rate = hours > 0 ? Math.round((price / hours) * 100) / 100 : 0;
+  // Show "hours x rate" only when it multiplies back to the exact price
+  const hourly = hours > 0 && Math.abs(rate * hours - price) < 0.005;
+
+  const item = hourly
+    ? {
+        name: scope.extra_work,
+        description: "Additional work: " + hours + " hours",
+        quantity: String(hours),
+        unit_amount: { currency_code: "USD", value: rate.toFixed(2) },
+        unit_of_measure: "HOURS",
+      }
+    : {
+        name: scope.extra_work,
+        description:
+          hours > 0
+            ? "Estimated " + hours + " hours of additional work"
+            : "Additional work requested by the client",
+        quantity: "1",
+        unit_amount: { currency_code: "USD", value: price.toFixed(2) },
+      };
+
   const token = await getAccessToken();
 
   const response = await fetch(BASE_URL + "/v2/invoicing/invoices", {
@@ -193,19 +216,10 @@ async function createDraftInvoice(scope, clientEmail) {
       detail: {
         currency_code: "USD",
         note: "Change order for additional work requested outside the original agreement.",
+        payment_term: { term_type: "NET_15" },
       },
       primary_recipients: [{ billing_info: { email_address: clientEmail } }],
-      items: [
-        {
-          name: scope.extra_work,
-          description:
-            Number(scope.hours) > 0
-              ? "Estimated " + scope.hours + " hours of additional work"
-              : "Additional work requested by the client",
-          quantity: "1",
-          unit_amount: { currency_code: "USD", value: price.toFixed(2) },
-        },
-      ],
+      items: [item],
     }),
   });
 
@@ -339,7 +353,7 @@ app.post("/draft-reminder", async (req, res) => {
     const stage = [1, 2, 3].includes(Number(level)) ? Number(level) : 1;
     const tones = {
       1: "a friendly, short reminder that assumes the client simply forgot",
-      2: "a firm but polite follow-up that says the invoice is overdue and asks for payment within 7 days",
+      2: "a firm but polite follow-up that asks for payment within 7 days (say the invoice is overdue only if the due date has already passed)",
       3: "a polite message offering to split the remaining amount into 2 or 3 equal installments if the client replies to agree, while still asking for a decision soon",
     };
 
@@ -350,13 +364,17 @@ app.post("/draft-reminder", async (req, res) => {
     const item = invoice.items?.[0]?.name;
     const payLink = invoice.detail?.metadata?.recipient_view_url || "";
 
+    const greeting = client_name ? "Hi " + client_name + "," : "Hello,";
+    const signature = freelancer_name || "[Your name]";
     const prompt = `Write an email from a freelancer to a client about an unpaid invoice.
 Style: ${tones[stage]}.
 Always stay professional and respectful. Never threaten legal action, fees or penalties.
 Use only the facts below. Do not invent dates, amounts or fees.
+Start the email with the greeting line, and end it with "Best regards," followed by the sign-off name on a new line.
 
-Freelancer name: ${freelancer_name || "[Your name]"}
-Client name: ${client_name || "there"}
+Today's date: ${new Date().toISOString().slice(0, 10)}
+Greeting line (use exactly): ${greeting}
+Sign-off name (use exactly): ${signature}
 Invoice number: ${invoiceNumber}
 Work billed: ${item}
 Amount: ${amount} ${currency}
