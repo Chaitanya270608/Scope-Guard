@@ -145,6 +145,18 @@ export default function App() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  function handleSendReminder() {
+    run("Sending reminder via PayPal...", async () => {
+      const data = await api("/send-paypal-reminder", {
+        invoice_id: invoiceId,
+        reminder_text: reminder.body
+      });
+      if (data.success) {
+        alert("Reminder sent successfully to the client!");
+      }
+    });
+  }
+
   function handleReset() {
     setContract("");
     setMessage("");
@@ -846,21 +858,39 @@ export default function App() {
                   marginBottom: 8
                 }}>
                   <span style={{ color: "#f8fafc", fontWeight: 600 }}>Subject: {reminder.subject}</span>
-                  <button
-                    onClick={handleCopyEmail}
-                    style={{
-                      background: copied ? "rgba(52, 211, 153, 0.15)" : "rgba(255, 255, 255, 0.06)",
-                      color: copied ? "#34d399" : "#cbd5e1",
-                      border: `1px solid ${copied ? "rgba(52, 211, 153, 0.3)" : "rgba(255, 255, 255, 0.1)"}`,
-                      borderRadius: 6,
-                      padding: "3px 8px",
-                      fontSize: 11.5,
-                      cursor: "pointer",
-                      fontWeight: 500
-                    }}
-                  >
-                    {copied ? "✓ Copied!" : "📋 Copy"}
-                  </button>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      onClick={handleSendReminder}
+                      disabled={!!busy}
+                      style={{
+                        background: "rgba(37, 99, 235, 0.15)",
+                        color: "#60a5fa",
+                        border: "1px solid rgba(37, 99, 235, 0.3)",
+                        borderRadius: 6,
+                        padding: "3px 8px",
+                        fontSize: 11.5,
+                        cursor: busy ? "not-allowed" : "pointer",
+                        fontWeight: 500
+                      }}
+                    >
+                      {busy === "Sending reminder via PayPal..." ? "Sending..." : "📤 Send via PayPal"}
+                    </button>
+                    <button
+                      onClick={handleCopyEmail}
+                      style={{
+                        background: copied ? "rgba(52, 211, 153, 0.15)" : "rgba(255, 255, 255, 0.06)",
+                        color: copied ? "#34d399" : "#cbd5e1",
+                        border: `1px solid ${copied ? "rgba(52, 211, 153, 0.3)" : "rgba(255, 255, 255, 0.1)"}`,
+                        borderRadius: 6,
+                        padding: "3px 8px",
+                        fontSize: 11.5,
+                        cursor: "pointer",
+                        fontWeight: 500
+                      }}
+                    >
+                      {copied ? "✓ Copied!" : "📋 Copy"}
+                    </button>
+                  </div>
                 </div>
                 <div style={{ whiteSpace: "pre-wrap" }}>{reminder.body}</div>
               </div>

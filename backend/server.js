@@ -424,4 +424,42 @@ app.post("/create-invoice", async (req, res) => {
   }
 });
 
+app.post("/send-paypal-reminder", async (req, res) => {
+  try {
+    const { invoice_id, reminder_text } = req.body;
+    if (!invoice_id || !reminder_text) {
+      return res.status(400).json({ error: "Missing invoice_id or reminder_text" });
+    }
+
+    const token = await getAccessToken(); // Matches your file exactly
+
+    const response = await fetch(
+      BASE_URL + "/v2/invoicing/invoices/" + invoice_id + "/remind",
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          subject: "Reminder: Action required on your invoice",
+          note: reminder_text,
+          send_to_invoicer: true,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error("PayPal Remind Error:", errorData);
+      return res.status(response.status).json({ error: "Failed to send reminder", details: errorData });
+    }
+
+    res.json({ success: true, message: "Reminder sent successfully via PayPal" });
+  } catch (err) {
+    console.error("Error sending reminder:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(3000, () => console.log("Server running on port 3000"));
