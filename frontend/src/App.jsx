@@ -18,7 +18,6 @@ async function api(path, body) {
   return data;
 }
 
-// Demo Presets for 1-Click Testing & Video Recording
 const DEMO_PRESETS = {
   creep: {
     contract:
@@ -34,7 +33,15 @@ const DEMO_PRESETS = {
   },
 };
 
+const STEPS = [
+  { id: 1, label: "01. Scope Audit" },
+  { id: 2, label: "02. AI Verdict" },
+  { id: 3, label: "03. PayPal Billing" },
+  { id: 4, label: "04. Chaser Engine" },
+];
+
 export default function App() {
+  const [currentStep, setCurrentStep] = useState(1);
   const [contract, setContract] = useState("");
   const [message, setMessage] = useState("");
   const [scope, setScope] = useState(null);
@@ -77,6 +84,7 @@ export default function App() {
       setScope(data);
       setWork(data.extra_work || "");
       setPrice(data.suggested_price_usd > 0 ? String(data.suggested_price_usd) : "");
+      setCurrentStep(2);
     });
   }
 
@@ -84,7 +92,7 @@ export default function App() {
     run("Creating PayPal draft invoice...", async () => {
       const data = await api("/create-invoice", {
         extra_work: work,
-        hours: scope.hours,
+        hours: scope ? scope.hours : 0,
         reason: override
           ? "Additional work requested by the client"
           : scope.reason,
@@ -151,328 +159,436 @@ export default function App() {
     setClientName("");
     setReminder(null);
     setError("");
+    setCurrentStep(1);
   }
 
-  const showForm = scope && (!scope.in_scope || override);
+  const canGoToBilling = scope && (!scope.in_scope || override);
 
   return (
     <div className="sg-page">
       <style>{`
+        * { box-sizing: border-box; }
         .sg-page {
-          background-color: #080c14;
-          background-image: radial-gradient(circle at 50% 0%, rgba(30, 58, 138, 0.12) 0%, rgba(8, 12, 20, 1) 75%);
+          background-color: #0b0f17;
+          background-image: 
+            radial-gradient(circle at 50% 5%, rgba(56, 189, 248, 0.08) 0%, rgba(11, 15, 23, 0) 65%),
+            radial-gradient(circle at 85% 20%, rgba(99, 102, 241, 0.05) 0%, rgba(11, 15, 23, 0) 50%);
           min-height: 100vh;
-          color: #f8fafc;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-          padding: 40px 20px 100px 20px;
-          box-sizing: border-box;
+          color: #e2e8f0;
+          font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 32px 20px 48px 20px;
         }
         .sg-container {
-          max-width: 760px;
-          margin: 0 auto;
+          width: 100%;
+          max-width: 740px;
+          display: flex;
+          flex-direction: column;
         }
         .sg-card {
-          background-color: #0f172a;
-          border: 1px solid #1e293b;
-          border-radius: 12px;
-          padding: 24px;
-          margin-top: 20px;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
-          transition: transform 0.2s ease, border-color 0.2s ease;
-          animation: sgSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          background: rgba(18, 24, 38, 0.75);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          border-radius: 16px;
+          padding: 26px;
+          box-shadow: 0 16px 36px -10px rgba(0, 0, 0, 0.35), 0 0 1px 1px rgba(255, 255, 255, 0.02) inset;
+          animation: sgFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
-        .sg-card:hover {
-          border-color: #334155;
-          transform: translateY(-2px);
+        @keyframes sgFadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
         }
         .sg-pulse-dot {
-          width: 8px;
-          height: 8px;
+          width: 7px;
+          height: 7px;
           border-radius: 50%;
-          background-color: #10b981;
-          box-shadow: 0 0 8px #10b981;
-          animation: sgPulse 2s infinite ease-in-out;
+          background-color: #34d399;
+          box-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
+          animation: sgPulse 2.4s infinite ease-in-out;
         }
         @keyframes sgPulse {
-          0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-          70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-          100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-        }
-        @keyframes sgSlideUp {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
+          0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5); }
+          70% { transform: scale(1.15); box-shadow: 0 0 0 6px rgba(52, 211, 153, 0); }
+          100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
         }
         .sg-textarea, .sg-input {
           width: 100%;
-          box-sizing: border-box;
-          background-color: #080c14;
-          color: #f8fafc;
-          border: 1px solid #334155;
-          border-radius: 8px;
+          background: rgba(11, 15, 23, 0.65);
+          color: #f1f5f9;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 10px;
           padding: 12px 14px;
-          font-size: 14px;
+          font-size: 13.5px;
           font-family: inherit;
-          line-height: 1.5;
+          line-height: 1.55;
           outline: none;
-          transition: border-color 0.15s ease;
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
         .sg-textarea:focus, .sg-input:focus {
-          border-color: #38bdf8;
-        }
-        .sg-step-badge {
-          display: inline-block;
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          color: #38bdf8;
-          background: rgba(56, 189, 248, 0.1);
-          border: 1px solid rgba(56, 189, 248, 0.25);
-          padding: 3px 8px;
-          border-radius: 4px;
-          margin-bottom: 12px;
-          font-family: monospace;
+          border-color: rgba(56, 189, 248, 0.5);
+          box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.08);
         }
         .sg-preset-btn {
-          background: #1e293b;
+          background: rgba(255, 255, 255, 0.04);
           color: #94a3b8;
-          border: 1px solid #334155;
-          border-radius: 6px;
-          padding: 4px 10px;
-          font-size: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          border-radius: 8px;
+          padding: 5px 11px;
+          font-size: 11.5px;
           cursor: pointer;
-          transition: all 0.15s ease;
+          transition: all 0.2s ease;
         }
         .sg-preset-btn:hover {
-          color: #f8fafc;
-          border-color: #475569;
-          background: #27354a;
+          color: #f1f5f9;
+          border-color: rgba(255, 255, 255, 0.15);
+          background: rgba(255, 255, 255, 0.08);
+        }
+        .sg-stepper {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 8px;
+          margin-bottom: 20px;
+        }
+        .sg-step-node {
+          padding: 9px 8px;
+          border-radius: 10px;
+          font-size: 12px;
+          font-weight: 500;
+          text-align: center;
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          color: #64748b;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+        }
+        .sg-step-node.active {
+          background: rgba(56, 189, 248, 0.08);
+          border-color: rgba(56, 189, 248, 0.35);
+          color: #38bdf8;
+          font-weight: 600;
+        }
+        .sg-step-node.completed {
+          color: #94a3b8;
+          border-color: rgba(255, 255, 255, 0.08);
+        }
+        .sg-step-node.disabled {
+          cursor: not-allowed;
+          opacity: 0.4;
         }
       `}</style>
 
       <div className="sg-container">
-        {/* Navigation & Header */}
-        <header style={{ marginBottom: 32, borderBottom: "1px solid #1e293b", paddingBottom: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
-            <div>
-              <h1 style={{
-                fontSize: 32,
-                fontWeight: 800,
-                letterSpacing: "-0.03em",
-                margin: 0,
-                background: "linear-gradient(135deg, #ffffff 40%, #94a3b8 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent"
-              }}>
-                ScopeGuard
-              </h1>
-              <p style={{ color: "#94a3b8", fontSize: 14, margin: "6px 0 0 0" }}>
-                AI Scope Creep Protector & Automated PayPal Billing Agent
-              </p>
-            </div>
-            <div style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              backgroundColor: "rgba(16, 185, 129, 0.1)",
-              color: "#34d399",
-              border: "1px solid rgba(16, 185, 129, 0.25)",
-              padding: "6px 14px",
-              borderRadius: 9999,
-              fontSize: 12,
-              fontWeight: 600,
-              fontFamily: "monospace"
+        {/* Softer Header */}
+        <header style={{ marginBottom: 22, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <h1 style={{
+              fontSize: 23,
+              fontWeight: 700,
+              letterSpacing: "-0.02em",
+              margin: 0,
+              color: "#f8fafc"
             }}>
-              <span className="sg-pulse-dot"></span>
-              PayPal US Sandbox: Connected
-            </div>
+              ScopeGuard
+            </h1>
+            <p style={{ color: "#94a3b8", fontSize: 13, margin: "3px 0 0 0" }}>
+              AI Scope Creep Protector & Automated PayPal Billing Agent
+            </p>
+          </div>
+          <div style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            backgroundColor: "rgba(52, 211, 153, 0.08)",
+            color: "#34d399",
+            border: "1px solid rgba(52, 211, 153, 0.2)",
+            padding: "5px 12px",
+            borderRadius: 9999,
+            fontSize: 12,
+            fontWeight: 500,
+            fontFamily: "monospace"
+          }}>
+            <span className="sg-pulse-dot"></span>
+            PayPal Sandbox: Connected
           </div>
         </header>
 
-        {/* Card 1: Input & Scope Audit */}
-        <div className="sg-card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-            <span className="sg-step-badge">STEP 01 / AUDIT</span>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" onClick={() => loadPreset("creep")} className="sg-preset-btn">
-                ⚡ Scope Creep Scenario
+        {/* Softer Stepper */}
+        <div className="sg-stepper">
+          {STEPS.map((s) => {
+            const isActive = currentStep === s.id;
+            const isCompleted =
+              (s.id === 1 && scope) ||
+              (s.id === 2 && scope) ||
+              (s.id === 3 && sent);
+            const isAccessible =
+              s.id === 1 ||
+              (s.id === 2 && scope) ||
+              (s.id === 3 && canGoToBilling) ||
+              (s.id === 4 && sent);
+
+            return (
+              <button
+                key={s.id}
+                type="button"
+                className={`sg-step-node ${isActive ? "active" : ""} ${isCompleted ? "completed" : ""} ${!isAccessible ? "disabled" : ""}`}
+                disabled={!isAccessible}
+                onClick={() => isAccessible && setCurrentStep(s.id)}
+              >
+                {isCompleted && !isActive ? "✓" : null}
+                {s.label}
               </button>
-              <button type="button" onClick={() => loadPreset("inScope")} className="sg-preset-btn">
-                ⚡ In-Scope Scenario
-              </button>
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#94a3b8", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              Contract Baseline
-            </label>
-            <textarea
-              rows={4}
-              className="sg-textarea"
-              value={contract}
-              onChange={(e) => setContract(e.target.value)}
-              placeholder="Paste agreed contract scope, revision clauses, and rates..."
-            />
-          </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#94a3b8", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              Incoming Client Message
-            </label>
-            <textarea
-              rows={3}
-              className="sg-textarea"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Paste client's requested changes or extra work..."
-            />
-          </div>
-
-          <button
-            onClick={handleCheck}
-            disabled={!!busy || !contract || !message}
-            style={{
-              backgroundColor: "#2563eb",
-              color: "#ffffff",
-              border: "none",
-              borderRadius: 8,
-              padding: "12px 22px",
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: !!busy || !contract || !message ? "not-allowed" : "pointer",
-              opacity: !!busy || !contract || !message ? 0.6 : 1,
-              transition: "background 0.15s ease",
-            }}
-          >
-            {busy === "Analyzing contract & request..." ? busy : "Analyze Scope with AI"}
-          </button>
-
-          {busy && <p style={{ color: "#38bdf8", marginTop: 12, fontSize: 13.5 }}>{busy}</p>}
-          {error && (
-            <p style={{ color: "#f87171", marginTop: 12, fontSize: 13.5, backgroundColor: "rgba(239,68,68,0.1)", padding: 10, borderRadius: 6, border: "1px solid rgba(239,68,68,0.2)" }}>
-              {error}
-            </p>
-          )}
+            );
+          })}
         </div>
 
-        {/* Card 2: AI Verdict & Clause Auditor */}
-        {scope && (
+        {/* STEP 1: Audit Input View */}
+        {currentStep === 1 && (
           <div className="sg-card">
-            <span className="sg-step-badge">STEP 02 / VERDICT</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: "#38bdf8", letterSpacing: "0.06em", fontFamily: "monospace" }}>
+                STEP 01 / CONTRACT & REQUEST AUDIT
+              </span>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button type="button" onClick={() => loadPreset("creep")} className="sg-preset-btn">
+                  ⚡ Scope Creep
+                </button>
+                <button type="button" onClick={() => loadPreset("inScope")} className="sg-preset-btn">
+                  ⚡ In-Scope
+                </button>
+              </div>
+            </div>
 
-            <div style={{ marginTop: 4 }}>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.03em" }}>
+                Contract Baseline
+              </label>
+              <textarea
+                rows={4}
+                className="sg-textarea"
+                value={contract}
+                onChange={(e) => setContract(e.target.value)}
+                placeholder="Paste contract scope, revision clauses, and rates..."
+              />
+            </div>
+
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.03em" }}>
+                Incoming Client Message
+              </label>
+              <textarea
+                rows={3}
+                className="sg-textarea"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Paste client's requested changes or extra work..."
+              />
+            </div>
+
+            <button
+              onClick={handleCheck}
+              disabled={!!busy || !contract || !message}
+              style={{
+                width: "100%",
+                backgroundColor: "#2563eb",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: 10,
+                padding: "11px",
+                fontSize: 13.5,
+                fontWeight: 600,
+                cursor: !!busy || !contract || !message ? "not-allowed" : "pointer",
+                opacity: !!busy || !contract || !message ? 0.6 : 1,
+                boxShadow: "0 4px 14px rgba(37, 99, 235, 0.25)",
+                transition: "opacity 0.2s ease",
+              }}
+            >
+              {busy === "Analyzing contract & request..." ? busy : "Analyze Scope with Gemini AI →"}
+            </button>
+
+            {busy && <p style={{ color: "#38bdf8", marginTop: 12, fontSize: 13 }}>{busy}</p>}
+            {error && (
+              <p style={{ color: "#f87171", marginTop: 12, fontSize: 13, backgroundColor: "rgba(239, 68, 68, 0.08)", padding: 10, borderRadius: 8, border: "1px solid rgba(239, 68, 68, 0.15)" }}>
+                {error}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* STEP 2: Verdict View */}
+        {currentStep === 2 && scope && (
+          <div className="sg-card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: "#38bdf8", letterSpacing: "0.06em", fontFamily: "monospace" }}>
+                STEP 02 / AUDIT VERDICT
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(1)}
+                style={{ background: "none", border: "none", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}
+              >
+                ← Back to Inputs
+              </button>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
               <span style={{
                 display: "inline-block",
-                padding: "6px 14px",
-                borderRadius: 6,
-                fontSize: 12,
-                fontWeight: 700,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                backgroundColor: scope.in_scope ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
+                padding: "5px 12px",
+                borderRadius: 9999,
+                fontSize: 11.5,
+                fontWeight: 600,
+                letterSpacing: "0.04em",
+                backgroundColor: scope.in_scope ? "rgba(52, 211, 153, 0.1)" : "rgba(248, 113, 113, 0.1)",
                 color: scope.in_scope ? "#34d399" : "#f87171",
-                border: `1px solid ${scope.in_scope ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`,
-                marginBottom: 12
+                border: `1px solid ${scope.in_scope ? "rgba(52, 211, 153, 0.25)" : "rgba(248, 113, 113, 0.25)"}`,
               }}>
                 {scope.in_scope ? "Verdict: In Scope" : "Verdict: Out of Scope Detected"}
               </span>
             </div>
 
-            <p style={{ fontSize: 14.5, color: "#f1f5f9", lineHeight: 1.6, margin: "6px 0 12px 0" }}>
+            <p style={{ fontSize: 14, color: "#e2e8f0", lineHeight: 1.6, margin: "6px 0 14px 0" }}>
               {scope.reason}
             </p>
 
             {scope.contract_clause && (
               <div style={{
-                borderLeft: "3px solid #38bdf8",
-                backgroundColor: "rgba(56, 189, 248, 0.08)",
-                padding: "12px 16px",
-                borderRadius: "0 8px 8px 0",
+                borderLeft: "2px solid #38bdf8",
+                backgroundColor: "rgba(56, 189, 248, 0.05)",
+                padding: "10px 14px",
+                borderRadius: "0 10px 10px 0",
                 color: "#bae6fd",
-                fontSize: 13.5,
-                margin: "14px 0",
+                fontSize: 13,
+                marginBottom: 14,
                 lineHeight: 1.5,
               }}>
-                <strong style={{ color: "#38bdf8", display: "block", marginBottom: 4 }}>Audited Contract Clause:</strong>
+                <strong style={{ color: "#38bdf8", display: "block", marginBottom: 2, fontSize: 11.5 }}>Audited Clause:</strong>
                 <em>"{scope.contract_clause}"</em>
               </div>
             )}
 
-            {/* Financial Ledger Receipt */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-              gap: 12,
-              padding: "14px 16px",
-              backgroundColor: "#080c14",
-              borderRadius: 8,
-              border: "1px solid #1e293b",
-              fontSize: 13,
-              marginTop: 14
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 8,
+              padding: "12px 14px",
+              backgroundColor: "rgba(11, 15, 23, 0.55)",
+              borderRadius: 10,
+              border: "1px solid rgba(255, 255, 255, 0.06)",
+              fontSize: 12,
+              marginBottom: 16
             }}>
               <div>
-                <span style={{ color: "#94a3b8", display: "block", fontSize: 11 }}>ESTIMATED EFFORT</span>
-                <strong style={{ color: "#f8fafc", fontSize: 14 }}>{scope.hours || 0} hrs</strong>
+                <span style={{ color: "#94a3b8", display: "block", fontSize: 11 }}>EFFORT</span>
+                <strong style={{ color: "#f8fafc", fontSize: 13 }}>{scope.hours || 0} hrs</strong>
               </div>
               <div>
                 <span style={{ color: "#94a3b8", display: "block", fontSize: 11 }}>SUGGESTED AMENDMENT</span>
-                <strong style={{ color: "#34d399", fontSize: 14 }}>${scope.suggested_price_usd || 0} USD</strong>
+                <strong style={{ color: "#34d399", fontSize: 13 }}>${scope.suggested_price_usd || 0} USD</strong>
               </div>
               <div>
                 <span style={{ color: "#94a3b8", display: "block", fontSize: 11 }}>CONFIDENCE</span>
-                <strong style={{ color: scope.confidence === "high" ? "#34d399" : "#fbbf24", fontSize: 14 }}>
+                <strong style={{ color: scope.confidence === "high" ? "#34d399" : "#fbbf24", fontSize: 13 }}>
                   {scope.confidence ? scope.confidence.toUpperCase() : "NORMAL"}
                 </strong>
               </div>
             </div>
 
-            {scope.confidence !== "high" && (
-              <p style={{ color: "#fbbf24", fontSize: 13, marginTop: 10 }}>
-                Notice: Borderline request. Review contract clauses before billing.
-              </p>
-            )}
-
-            {scope.in_scope && !override && !invoiceId && (
-              <div style={{ marginTop: 16 }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+              {!scope.in_scope && (
                 <button
-                  onClick={() => setOverride(true)}
-                  disabled={!!busy}
+                  onClick={() => setCurrentStep(3)}
                   style={{
-                    backgroundColor: "#1e293b",
-                    color: "#f8fafc",
-                    border: "1px solid #334155",
-                    borderRadius: 8,
-                    padding: "9px 16px",
-                    fontSize: 13,
+                    flex: 1,
+                    backgroundColor: "#2563eb",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: 10,
+                    padding: "11px 16px",
+                    fontSize: 13.5,
                     fontWeight: 600,
+                    cursor: "pointer",
+                    boxShadow: "0 4px 14px rgba(37, 99, 235, 0.25)",
+                  }}
+                >
+                  Proceed to PayPal Billing →
+                </button>
+              )}
+
+              {scope.in_scope && !override && (
+                <button
+                  onClick={() => {
+                    setOverride(true);
+                    setCurrentStep(3);
+                  }}
+                  style={{
+                    backgroundColor: "rgba(255, 255, 255, 0.05)",
+                    color: "#f8fafc",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    borderRadius: 10,
+                    padding: "11px 16px",
+                    fontSize: 13,
+                    fontWeight: 500,
                     cursor: "pointer",
                   }}
                 >
-                  Override & Bill Anyway
+                  Override & Bill Anyway →
                 </button>
-              </div>
-            )}
+              )}
+
+              {scope.in_scope && override && (
+                <button
+                  onClick={() => setCurrentStep(3)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#2563eb",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: 10,
+                    padding: "11px 16px",
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    boxShadow: "0 4px 14px rgba(37, 99, 235, 0.25)",
+                  }}
+                >
+                  Continue to Discretionary Billing →
+                </button>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Card 3: PayPal Draft Invoice Builder */}
-        {showForm && (
+        {/* STEP 3: PayPal Billing View */}
+        {currentStep === 3 && (
           <div className="sg-card">
-            <span className="sg-step-badge">STEP 03 / PAYPAL BILLING</span>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 16px 0", color: "#f8fafc" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: "#38bdf8", letterSpacing: "0.06em", fontFamily: "monospace" }}>
+                STEP 03 / PAYPAL BILLING
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(2)}
+                style={{ background: "none", border: "none", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}
+              >
+                ← Back to Verdict
+              </button>
+            </div>
+
+            <h3 style={{ fontSize: 15, fontWeight: 600, margin: "0 0 12px 0", color: "#f8fafc" }}>
               {override ? "Discretionary Invoice Builder" : "Scope Amendment Invoice"}
             </h3>
 
-            {!override && (
-              <p style={{ fontSize: 13.5, color: "#94a3b8", margin: "0 0 16px 0" }}>
-                AI Estimated Effort: <strong style={{ color: "#f8fafc" }}>{scope.hours} hours</strong>
-              </p>
-            )}
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: 14, marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: 12, marginBottom: 14 }}>
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#94a3b8", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  Line Item Work Description
+                <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.03em" }}>
+                  Deliverable Description
                 </label>
                 <input
                   className="sg-input"
@@ -484,7 +600,7 @@ export default function App() {
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#94a3b8", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.03em" }}>
                   Price (USD)
                 </label>
                 <input
@@ -498,120 +614,145 @@ export default function App() {
               </div>
             </div>
 
-            {!invoiceId && (
+            {!invoiceId ? (
               <button
                 onClick={handleCreate}
                 disabled={!!busy || !work.trim() || !(Number(price) > 0)}
                 style={{
+                  width: "100%",
                   backgroundColor: "#2563eb",
                   color: "#ffffff",
                   border: "none",
-                  borderRadius: 8,
-                  padding: "12px 22px",
-                  fontSize: 14,
+                  borderRadius: 10,
+                  padding: "11px",
+                  fontSize: 13.5,
                   fontWeight: 600,
                   cursor: !!busy || !work.trim() || !(Number(price) > 0) ? "not-allowed" : "pointer",
                   opacity: !!busy || !work.trim() || !(Number(price) > 0) ? 0.6 : 1,
+                  boxShadow: "0 4px 14px rgba(37, 99, 235, 0.25)",
                 }}
               >
-                Create PayPal Draft Invoice
+                {busy === "Creating PayPal draft invoice..." ? busy : "Create PayPal Draft Invoice"}
               </button>
-            )}
-          </div>
-        )}
+            ) : (
+              <div style={{ padding: "14px", backgroundColor: "rgba(11, 15, 23, 0.55)", borderRadius: 10, border: "1px solid rgba(255, 255, 255, 0.06)", marginTop: 10 }}>
+                <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 10px 0" }}>
+                  Draft Invoice ID: <strong style={{ fontFamily: "monospace", color: "#38bdf8" }}>{invoiceId}</strong>
+                </p>
 
-        {/* PayPal Active Invoice Status */}
-        {invoiceId && (
-          <div className="sg-card">
-            <span className="sg-step-badge">LIVE LEDGER</span>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 14px 0", color: "#f8fafc" }}>
-              PayPal Invoicing Ledger
-            </h3>
-            <p style={{ fontSize: 13.5, color: "#94a3b8", margin: "0 0 14px 0" }}>
-              Draft Invoice ID: <span style={{ fontFamily: "monospace", color: "#38bdf8", fontWeight: 700 }}>{invoiceId}</span>
-            </p>
-
-            {!sent && (
-              <button
-                onClick={handleSend}
-                disabled={!!busy}
-                style={{
-                  backgroundColor: "#059669",
-                  color: "#ffffff",
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "11px 20px",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                Send Invoice to Client
-              </button>
-            )}
-
-            {sent && (
-              <div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-                  <span style={{ color: "#34d399", fontWeight: 600, fontSize: 13.5 }}>
-                    ✓ Delivered to Client Sandbox Account
-                  </span>
+                {!sent ? (
                   <button
-                    onClick={handleStatus}
+                    onClick={handleSend}
                     disabled={!!busy}
                     style={{
-                      backgroundColor: "#1e293b",
-                      color: "#f8fafc",
-                      border: "1px solid #334155",
-                      borderRadius: 8,
-                      padding: "8px 14px",
-                      fontSize: 13,
+                      width: "100%",
+                      backgroundColor: "#059669",
+                      color: "#ffffff",
+                      border: "none",
+                      borderRadius: 10,
+                      padding: "11px",
+                      fontSize: 13.5,
                       fontWeight: 600,
                       cursor: "pointer",
+                      boxShadow: "0 4px 14px rgba(5, 150, 105, 0.25)",
                     }}
                   >
-                    Refresh Status
+                    {busy === "Delivering via PayPal API..." ? busy : "Send Invoice to Client"}
                   </button>
-                </div>
+                ) : (
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                      <span style={{ color: "#34d399", fontWeight: 500, fontSize: 13 }}>
+                        ✓ Delivered to Client Sandbox Ledger
+                      </span>
+                      <button
+                        onClick={handleStatus}
+                        disabled={!!busy}
+                        style={{
+                          backgroundColor: "rgba(255, 255, 255, 0.05)",
+                          color: "#f8fafc",
+                          border: "1px solid rgba(255, 255, 255, 0.08)",
+                          borderRadius: 8,
+                          padding: "5px 11px",
+                          fontSize: 12,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Refresh Status
+                      </button>
+                    </div>
 
-                {status && (
-                  <div style={{
-                    display: "flex",
-                    gap: 16,
-                    flexWrap: "wrap",
-                    padding: "12px 16px",
-                    backgroundColor: "#080c14",
-                    borderRadius: 8,
-                    border: "1px solid #1e293b",
-                    fontSize: 13,
-                    fontFamily: "monospace",
-                    alignItems: "center",
-                    marginTop: 14
-                  }}>
-                    <span>STATUS: <strong style={{ color: status.status === "PAID" ? "#34d399" : "#38bdf8" }}>{status.status}</strong></span>
-                    <span>TOTAL: <strong>${status.total} USD</strong></span>
-                    {status.due_date && <span>DUE: <strong>{status.due_date}</strong></span>}
+                    {status && (
+                      <div style={{
+                        display: "flex",
+                        gap: 16,
+                        padding: "10px 14px",
+                        backgroundColor: "rgba(11, 15, 23, 0.7)",
+                        borderRadius: 8,
+                        border: "1px solid rgba(255, 255, 255, 0.05)",
+                        fontSize: 12.5,
+                        fontFamily: "monospace",
+                        marginBottom: 12
+                      }}>
+                        <span>STATUS: <strong style={{ color: status.status === "PAID" ? "#34d399" : "#38bdf8" }}>{status.status}</strong></span>
+                        <span>TOTAL: <strong>${status.total} USD</strong></span>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => setCurrentStep(4)}
+                      style={{
+                        width: "100%",
+                        backgroundColor: "#2563eb",
+                        color: "#ffffff",
+                        border: "none",
+                        borderRadius: 10,
+                        padding: "11px",
+                        fontSize: 13.5,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        boxShadow: "0 4px 14px rgba(37, 99, 235, 0.25)",
+                      }}
+                    >
+                      Proceed to Polite Chaser Engine →
+                    </button>
                   </div>
                 )}
               </div>
             )}
+
+            {busy && <p style={{ color: "#38bdf8", marginTop: 12, fontSize: 13 }}>{busy}</p>}
+            {error && (
+              <p style={{ color: "#f87171", marginTop: 12, fontSize: 13, backgroundColor: "rgba(239, 68, 68, 0.08)", padding: 10, borderRadius: 8, border: "1px solid rgba(239, 68, 68, 0.15)" }}>
+                {error}
+              </p>
+            )}
           </div>
         )}
 
-        {/* Card 4: Polite Chaser Engine */}
-        {sent && (
+        {/* STEP 4: Chaser Engine View */}
+        {currentStep === 4 && sent && (
           <div className="sg-card">
-            <span className="sg-step-badge">STEP 04 / CHASER ENGINE</span>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 10px 0", color: "#f8fafc" }}>
-              Polite Chaser — Automated Payment Reminders
-            </h3>
-            <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px 0" }}>
-              Progressive 3-tier escalating email reminders generated by Gemini from real PayPal invoice records.
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: "#38bdf8", letterSpacing: "0.06em", fontFamily: "monospace" }}>
+                STEP 04 / CHASER ENGINE
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(3)}
+                style={{ background: "none", border: "none", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}
+              >
+                ← Back to Billing
+              </button>
+            </div>
+
+            <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 14px 0" }}>
+              Progressive escalating reminders generated by Gemini from live PayPal invoice details.
             </p>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#94a3b8", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.03em" }}>
                   Freelancer Name
                 </label>
                 <input
@@ -622,7 +763,7 @@ export default function App() {
                 />
               </div>
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#94a3b8", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.03em" }}>
                   Client Name
                 </label>
                 <input
@@ -634,18 +775,18 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
               <button
                 onClick={() => handleReminder(1)}
                 disabled={!!busy}
                 style={{
-                  backgroundColor: "#1e293b",
+                  backgroundColor: "rgba(255, 255, 255, 0.04)",
                   color: "#f8fafc",
-                  border: "1px solid #334155",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
                   borderRadius: 8,
-                  padding: "9px 16px",
-                  fontSize: 13,
-                  fontWeight: 600,
+                  padding: "8px 12px",
+                  fontSize: 12,
+                  fontWeight: 500,
                   cursor: "pointer",
                 }}
               >
@@ -655,13 +796,13 @@ export default function App() {
                 onClick={() => handleReminder(2)}
                 disabled={!!busy}
                 style={{
-                  backgroundColor: "#1e293b",
+                  backgroundColor: "rgba(255, 255, 255, 0.04)",
                   color: "#f8fafc",
-                  border: "1px solid #334155",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
                   borderRadius: 8,
-                  padding: "9px 16px",
-                  fontSize: 13,
-                  fontWeight: 600,
+                  padding: "8px 12px",
+                  fontSize: 12,
+                  fontWeight: 500,
                   cursor: "pointer",
                 }}
               >
@@ -671,13 +812,13 @@ export default function App() {
                 onClick={() => handleReminder(3)}
                 disabled={!!busy}
                 style={{
-                  backgroundColor: "#1e293b",
+                  backgroundColor: "rgba(255, 255, 255, 0.04)",
                   color: "#f8fafc",
-                  border: "1px solid #334155",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
                   borderRadius: 8,
-                  padding: "9px 16px",
-                  fontSize: 13,
-                  fontWeight: 600,
+                  padding: "8px 12px",
+                  fontSize: 12,
+                  fontWeight: 500,
                   cursor: "pointer",
                 }}
               >
@@ -685,18 +826,14 @@ export default function App() {
               </button>
             </div>
 
-            {reminder && reminder.needed === false && (
-              <p style={{ color: "#34d399", marginTop: 14, fontSize: 13.5 }}>{reminder.message}</p>
-            )}
-
             {reminder && reminder.needed && (
               <div style={{
-                backgroundColor: "#080c14",
-                border: "1px solid #334155",
-                borderRadius: 8,
-                padding: 18,
-                marginTop: 14,
-                fontSize: 13.5,
+                backgroundColor: "rgba(11, 15, 23, 0.65)",
+                border: "1px solid rgba(255, 255, 255, 0.07)",
+                borderRadius: 10,
+                padding: 14,
+                marginBottom: 14,
+                fontSize: 13,
                 lineHeight: 1.6,
                 color: "#cbd5e1",
               }}>
@@ -704,42 +841,41 @@ export default function App() {
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
-                  borderBottom: "1px solid #1e293b",
+                  borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
                   paddingBottom: 8,
-                  marginBottom: 10
+                  marginBottom: 8
                 }}>
-                  <span style={{ color: "#f8fafc", fontWeight: 700 }}>Subject: {reminder.subject}</span>
+                  <span style={{ color: "#f8fafc", fontWeight: 600 }}>Subject: {reminder.subject}</span>
                   <button
                     onClick={handleCopyEmail}
                     style={{
-                      background: copied ? "rgba(16, 185, 129, 0.2)" : "#1e293b",
+                      background: copied ? "rgba(52, 211, 153, 0.15)" : "rgba(255, 255, 255, 0.06)",
                       color: copied ? "#34d399" : "#cbd5e1",
-                      border: `1px solid ${copied ? "#10b981" : "#334155"}`,
+                      border: `1px solid ${copied ? "rgba(52, 211, 153, 0.3)" : "rgba(255, 255, 255, 0.1)"}`,
                       borderRadius: 6,
-                      padding: "4px 10px",
-                      fontSize: 12,
+                      padding: "3px 8px",
+                      fontSize: 11.5,
                       cursor: "pointer",
-                      fontWeight: 600
+                      fontWeight: 500
                     }}
                   >
-                    {copied ? "✓ Copied!" : "📋 Copy Email"}
+                    {copied ? "✓ Copied!" : "📋 Copy"}
                   </button>
                 </div>
                 <div style={{ whiteSpace: "pre-wrap" }}>{reminder.body}</div>
               </div>
             )}
 
-            {/* Workflow Reset Action */}
-            <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid #1e293b", textAlign: "right" }}>
+            <div style={{ textAlign: "right", marginTop: 14, borderTop: "1px solid rgba(255, 255, 255, 0.06)", paddingTop: 12 }}>
               <button
                 onClick={handleReset}
                 style={{
                   background: "transparent",
                   color: "#94a3b8",
-                  border: "1px dashed #334155",
-                  borderRadius: 6,
-                  padding: "8px 14px",
-                  fontSize: 12,
+                  border: "1px dashed rgba(255, 255, 255, 0.12)",
+                  borderRadius: 8,
+                  padding: "6px 12px",
+                  fontSize: 11.5,
                   cursor: "pointer"
                 }}
               >
