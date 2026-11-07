@@ -1,6 +1,17 @@
 require("dotenv").config();
 const cors = require("cors");
 const express = require("express");
+const multer = require("multer");
+const pdf = require("pdf-parse");
+// Temporary memory to store the latest webhook message
+let latestWebhookMessage = "";
+
+// Setup multer to store the uploaded file in memory temporarily
+const upload = multer({ storage: multer.memoryStorage() });
+const FREELANCER = {
+  name: process.env.FREELANCER_NAME || "Independent Professional",
+  hourlyRate: process.env.FREELANCER_RATE || 50, 
+};
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -181,6 +192,29 @@ async function createDraftInvoice(scope, clientEmail) {
     throw new Error("AI did not return a valid price");
   }
 
+  const hours = Number(scope.hours);
+  const rate = hours > 0 ? Math.round((price / hours) * 100) / 100 : 0;
+  // Show "hours x rate" only when it multiplies back to the exact price
+  const hourly = hours > 0 && Math.abs(rate * hours - price) < 0.005;
+
+  const item = hourly
+    ? {
+        name: scope.extra_work,
+        description: "Additional work: " + hours + " hours",
+        quantity: String(hours),
+        unit_amount: { currency_code: "USD", value: Number(FREELANCER.hourlyRate).toFixed(2) },
+        unit_of_measure: "HOURS",
+      }
+    : {
+        name: scope.extra_work,
+        description:
+          hours > 0
+            ? "Estimated " + hours + " hours of additional work"
+            : "Additional work requested by the client",
+        quantity: "1",
+        unit_amount: { currency_code: "USD", value: price.toFixed(2) },
+      };
+
   const token = await getAccessToken();
 
   const response = await fetch(BASE_URL + "/v2/invoicing/invoices", {
@@ -193,19 +227,19 @@ async function createDraftInvoice(scope, clientEmail) {
       detail: {
         currency_code: "USD",
         note: "Change order for additional work requested outside the original agreement.",
+        payment_term: { term_type: "NET_15" },
+      },
+      configuration: {
+        partial_payment: {
+          allow_partial_payment: true,
+          minimum_amount_due: {
+            currency_code: "USD",
+            value: "50.00" 
+          }
+        }
       },
       primary_recipients: [{ billing_info: { email_address: clientEmail } }],
-      items: [
-        {
-          name: scope.extra_work,
-          description:
-            Number(scope.hours) > 0
-              ? "Estimated " + scope.hours + " hours of additional work"
-              : "Additional work requested by the client",
-          quantity: "1",
-          unit_amount: { currency_code: "USD", value: price.toFixed(2) },
-        },
-      ],
+      items: [item],
     }),
   });
 
@@ -232,7 +266,18 @@ app.post("/check-scope", async (req, res) => {
     if (!contract || !message) {
       return res.status(400).json({ error: "contract and message are required" });
     }
-    res.json(await checkScope(contract, message));
+    
+    // 1. Get the result from Gemini
+    const result = await checkScope(contract, message);
+    
+    // 2. Verify the quoted clause word-for-word against the uploaded contract
+    const normalize = (s) => String(s).toLowerCase().replace(/\s+/g, " ").trim();
+    result.clause_verified = result.contract_clause 
+      ? normalize(contract).includes(normalize(result.contract_clause)) 
+      : null;
+      
+    // 3. Send the verified result back to React
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -339,7 +384,7 @@ app.post("/draft-reminder", async (req, res) => {
     const stage = [1, 2, 3].includes(Number(level)) ? Number(level) : 1;
     const tones = {
       1: "a friendly, short reminder that assumes the client simply forgot",
-      2: "a firm but polite follow-up that says the invoice is overdue and asks for payment within 7 days",
+      2: "a firm but polite follow-up that asks for payment within 7 days (say the invoice is overdue only if the due date has already passed)",
       3: "a polite message offering to split the remaining amount into 2 or 3 equal installments if the client replies to agree, while still asking for a decision soon",
     };
 
@@ -350,13 +395,19 @@ app.post("/draft-reminder", async (req, res) => {
     const item = invoice.items?.[0]?.name;
     const payLink = invoice.detail?.metadata?.recipient_view_url || "";
 
+    const greeting = client_name ? "Hi " + client_name + "," : "Hello,";
+    const signature = freelancer_name || "[Your name]";
     const prompt = `Write an email from a freelancer to a client about an unpaid invoice.
 Style: ${tones[stage]}.
 Always stay professional and respectful. Never threaten legal action, fees or penalties.
 Use only the facts below. Do not invent dates, amounts or fees.
+Start the email with the greeting line, and end it with "Best regards," followed by the sign-off name on a new line.
+CRITICAL INSTRUCTION: Sign the email off exactly as "${FREELANCER.name}". 
+  Do NOT use any placeholders like "[Your name]" or "[Freelancer Name]".
 
-Freelancer name: ${freelancer_name || "[Your name]"}
-Client name: ${client_name || "there"}
+Today's date: ${new Date().toISOString().slice(0, 10)}
+Greeting line (use exactly): ${greeting}
+Sign-off name (use exactly): ${signature}
 Invoice number: ${invoiceNumber}
 Work billed: ${item}
 Amount: ${amount} ${currency}
@@ -389,6 +440,209 @@ app.post("/create-invoice", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+app.post("/send-paypal-reminder", async (req, res) => {
+  try {
+    const { invoice_id, reminder_text } = req.body;
+    if (!invoice_id || !reminder_text) {
+      return res.status(400).json({ error: "Missing invoice_id or reminder_text" });
+    }
+
+    const token = await getAccessToken(); // Matches your file exactly
+
+    const response = await fetch(
+      BASE_URL + "/v2/invoicing/invoices/" + invoice_id + "/remind",
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          subject: "Reminder: Action required on your invoice",
+          note: reminder_text,
+          send_to_invoicer: true,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error("PayPal Remind Error:", errorData);
+      return res.status(response.status).json({ error: "Failed to send reminder", details: errorData });
+    }
+
+    res.json({ success: true, message: "Reminder sent successfully via PayPal" });
+  } catch (err) {
+    console.error("Error sending reminder:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/draft-explanation", async (req, res) => {
+  try {
+    const { message, extra_work, price, freelancer_name, client_name } = req.body || {};
+    if (!extra_work) {
+      return res.status(400).json({ error: "extra_work is required" });
+    }
+
+    const greeting = client_name ? "Hi " + client_name + "," : "Hello,";
+    const signature = freelancer_name || FREELANCER.name;
+
+    const prompt = `Write an email from a freelancer to a client.
+The client asked for extra work that is out of scope.
+
+Client's request: "${message}"
+Out of scope work: "${extra_work}"
+Extra cost: $${price} USD
+
+Style: Professional, polite, but firm. 
+Acknowledge the request, gently explain it falls outside the original contract scope, say you are happy to do it, and let them know you will send a separate invoice for $${price} USD for this change order.
+
+Start exactly with: ${greeting}
+Sign off exactly with: Best regards,\n${signature}
+Do NOT use placeholders.
+
+Reply with JSON only, in exactly this shape:
+{"subject": "email subject line", "body": "the full email text"}`;
+
+    const email = await askGemini(prompt);
+    res.json(email);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/list-invoices", async (req, res) => {
+  try {
+    const token = await getAccessToken();
+    // Fetch the 20 most recent invoices
+    const response = await fetch(
+      BASE_URL + "/v2/invoicing/invoices?page_size=20",
+      { headers: { Authorization: "Bearer " + token } }
+    );
+
+    const data = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json(data);
+    }
+
+    res.json({ invoices: data.items || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+app.post("/cancel-invoice", async (req, res) => {
+  try {
+    const { invoice_id } = req.body;
+    if (!invoice_id) return res.status(400).json({ error: "invoice_id required" });
+
+    const token = await getAccessToken();
+    const response = await fetch(
+      `${BASE_URL}/v2/invoicing/invoices/${invoice_id}/cancel`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          subject: "Invoice Cancelled",
+          note: "This invoice has been voided because the requested out-of-scope work was withdrawn.",
+          send_to_invoicer: false,
+          send_to_recipient: true
+        }),
+      }
+    );
+
+    if (response.status !== 204 && response.status !== 200) {
+      const data = await response.json();
+      return res.status(response.status).json(data);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+async function generateQuote(client_email) {
+  const prompt = `You are an expert freelance project manager. Read this initial inquiry email from a client:
+"${client_email}"
+
+1. Extract the core deliverables they are asking for.
+2. Estimate a reasonable total project cost in USD (use your best judgment based on standard freelance rates, e.g., $50-$100/hr).
+3. Calculate a 50% upfront deposit amount.
+4. Provide a short, professional rationale for the estimate.
+
+Respond ONLY in valid JSON matching this exact schema:
+{
+  "deliverables": ["Deliverable 1", "Deliverable 2"],
+  "estimated_total": 1500,
+  "deposit_amount": 750,
+  "rationale": "Brief explanation of the pricing."
+}`;
+
+  return await askGemini(prompt);
+}
+
+app.post("/generate-quote", async (req, res) => {
+  try {
+    const { client_email } = req.body;
+    if (!client_email) return res.status(400).json({ error: "client_email is required" });
+
+    const quoteData = await generateQuote(client_email);
+    res.json(quoteData);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/parse-pdf", upload.single("contractFile"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    
+    const { PDFParse } = require("pdf-parse");
+    
+    // Convert the Node.js Buffer strictly into a Uint8Array
+    const uint8Array = new Uint8Array(req.file.buffer);
+    
+    // Initialize the parser with the converted data
+    const parser = new PDFParse(uint8Array);
+    
+    // Extract the text!
+    const result = await parser.getText();
+    
+    const extractedText = typeof result === "string" ? result : result.text;
+    
+    res.json({ text: extractedText });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 1. The Webhook Receiver (Zapier/Slack will POST to this)
+app.post("/webhook/intake", (req, res) => {
+  const { message } = req.body;
+  
+  if (!message) return res.status(400).json({ error: "No message provided" });
+  
+  // Save it to memory
+  latestWebhookMessage = message;
+  console.log("🔔 WEBHOOK RECEIVED:", message);
+  
+  res.json({ success: true, status: "Message caught successfully!" });
+});
+
+// 2. The Frontend Fetcher (React will call this to check for new messages)
+app.get("/webhook/latest", (req, res) => {
+  res.json({ message: latestWebhookMessage });
+  // Optional: clear it after reading so it doesn't stay there forever
+  latestWebhookMessage = ""; 
 });
 
 app.listen(3000, () => console.log("Server running on port 3000"));

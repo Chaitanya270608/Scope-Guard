@@ -57,6 +57,14 @@ export default function App() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [explanation, setExplanation] = useState(null);
+  const [copiedExp, setCopiedExp] = useState(false); 
+  const [invoices, setInvoices] = useState([]);
+  const [showLedger, setShowLedger] = useState(false);
+  const [appMode, setAppMode] = useState("scope"); // "scope" or "quote"
+  const [quoteInput, setQuoteInput] = useState("");
+  const [quoteResult, setQuoteResult] = useState(null);
+  const [quoteBusy, setQuoteBusy] = useState(false);
 
   async function run(label, action) {
     setBusy(label);
@@ -80,6 +88,7 @@ export default function App() {
       setSent(false);
       setStatus(null);
       setReminder(null);
+      setExplanation(null);
       const data = await api("/check-scope", { contract, message });
       setScope(data);
       setWork(data.extra_work || "");
@@ -145,6 +154,142 @@ export default function App() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  function handleSendReminder() {
+    run("Sending reminder via PayPal...", async () => {
+      const data = await api("/send-paypal-reminder", {
+        invoice_id: invoiceId,
+        reminder_text: reminder.body
+      });
+      if (data.success) {
+        alert("Reminder sent successfully to the client!");
+      }
+    });
+  }
+
+  function handleCancelInvoice() {
+    if (!window.confirm("Are you sure you want to void this invoice? This action cannot be undone.")) return;
+    
+    run("Voiding invoice...", async () => {
+      const data = await api("/cancel-invoice", { invoice_id: invoiceId });
+      if (data.success) {
+        alert("Invoice successfully voided.");
+        setStatus("CANCELLED"); 
+      }
+    });
+  }
+
+  function handleDraftExplanation() {
+    run("Drafting polite explanation...", async () => {
+      setExplanation(
+        await api("/draft-explanation", {
+          message,
+          extra_work: work,
+          price: Number(price),
+          freelancer_name: freelancerName,
+          client_name: clientName,
+        })
+      );
+    });
+  }
+
+  function handleCopyExplanation() {
+    if (!explanation || !explanation.body) return;
+    const fullText = `Subject: ${explanation.subject}\n\n${explanation.body}`;
+    navigator.clipboard.writeText(fullText);
+    setCopiedExp(true);
+    setTimeout(() => setCopiedExp(false), 2000);
+  }
+
+  function handleFetchInvoices() {
+    run("Fetching invoice ledger...", async () => {
+      const data = await api("/list-invoices");
+      setInvoices(data.invoices || []);
+      setShowLedger(true);
+    });
+  }
+
+  function handleSelectInvoice(inv) {
+    setInvoiceId(inv.id);
+    setSent(true); 
+    setStatus(inv.status); 
+    setShowLedger(false);
+    setCurrentStep(4); // Jump directly to the Chaser Engine
+  }
+
+  const handleGenerateQuote = async () => {
+    if (!quoteInput.trim()) return;
+    setQuoteBusy(true);
+    setError("");
+    setQuoteResult(null);
+
+    try {
+      const res = await fetch("http://localhost:3000/generate-quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_email: quoteInput })
+      });
+      const data = await res.json();
+      
+      if (data.error) throw new Error(data.error);
+      setQuoteResult(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setQuoteBusy(false);
+    }
+  };
+
+const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.type === "text/plain") {
+      // Handle standard TXT files instantly in the browser
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setContract(event.target.result);
+      };
+      reader.readAsText(file);
+    } else if (file.type === "application/pdf") {
+      // Handle PDFs via the backend endpoint
+      setContract("⏳ Extracting text from PDF, please wait...");
+      try {
+        const formData = new FormData();
+        formData.append("contractFile", file);
+
+        const res = await fetch("http://localhost:3000/parse-pdf", {
+          method: "POST",
+          body: formData
+        });
+        
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        
+        setContract(data.text);
+      } catch (err) {
+        alert("Failed to parse PDF: " + err.message);
+        setContract("");
+      }
+    } else {
+      alert("Please upload a .txt or .pdf file.");
+    }
+  };
+
+  const handleCheckWebhook = async () => {
+    try {
+      const res = await fetch("http://localhost:3000/webhook/latest");
+      const data = await res.json();
+      
+      if (data.message) {
+        setMessage(data.message); // Auto-fill the message box!
+      } else {
+        alert("No new messages found in the webhook trap.");
+      }
+    } catch (err) {
+      console.error("Webhook fetch error:", err);
+    }
+  };
+
   function handleReset() {
     setContract("");
     setMessage("");
@@ -158,6 +303,7 @@ export default function App() {
     setFreelancerName("");
     setClientName("");
     setReminder(null);
+    setExplanation(null);
     setError("");
     setCurrentStep(1);
   }
@@ -300,6 +446,58 @@ export default function App() {
             <p style={{ color: "#94a3b8", fontSize: 13, margin: "3px 0 0 0" }}>
               AI Scope Creep Protector & Automated PayPal Billing Agent
             </p>
+            {/* App Mode Toggle */}
+            <div style={{ display: "flex", backgroundColor: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 4, width: "fit-content", marginTop: 14 }}>
+              <button
+                onClick={() => setAppMode("scope")}
+                style={{
+                  backgroundColor: appMode === "scope" ? "#38bdf8" : "transparent",
+                  color: appMode === "scope" ? "#0f172a" : "#94a3b8",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "6px 16px",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.2s"
+                }}
+              >
+                🛡️ ScopeGuard
+              </button>
+              <button
+                onClick={() => setAppMode("quote")}
+                style={{
+                  backgroundColor: appMode === "quote" ? "#34d399" : "transparent",
+                  color: appMode === "quote" ? "#0f172a" : "#94a3b8",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "6px 16px",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.2s"
+                }}
+              >
+                📝 QuoteGen
+              </button>
+            </div>
+            <button
+              onClick={handleFetchInvoices}
+              disabled={!!busy}
+              style={{
+                marginTop: 14,
+                background: "rgba(255, 255, 255, 0.05)",
+                color: "#e2e8f0",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: 8,
+                padding: "6px 14px",
+                fontSize: 12,
+                cursor: busy ? "not-allowed" : "pointer",
+                fontWeight: 500
+              }}
+            >
+              {busy === "Fetching invoice ledger..." ? "Loading..." : "🧾 View Invoice Ledger"}
+            </button>
           </div>
           <div style={{
             display: "inline-flex",
@@ -319,19 +517,149 @@ export default function App() {
           </div>
         </header>
 
+        {showLedger ? (
+          <div className="sg-card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#f8fafc" }}>RECENT INVOICES</span>
+              <button
+                onClick={() => setShowLedger(false)}
+                style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 12 }}
+              >
+                ✕ Close
+              </button>
+            </div>
+            
+            {invoices.length === 0 ? (
+              <div style={{ color: "#94a3b8", fontSize: 13, textAlign: "center", padding: "20px 0" }}>No invoices found.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {invoices.map((inv) => (
+                  <div key={inv.id} style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    backgroundColor: "rgba(11, 15, 23, 0.5)",
+                    border: "1px solid rgba(255, 255, 255, 0.05)",
+                    padding: "12px 16px",
+                    borderRadius: 8
+                  }}>
+                    <div>
+                      <strong style={{ color: "#e2e8f0", fontSize: 13, display: "block" }}>{inv.id}</strong>
+                      <span style={{ color: "#94a3b8", fontSize: 11 }}>Status: {inv.status}</span>
+                    </div>
+                    <button
+                      onClick={() => handleSelectInvoice(inv)}
+                      style={{
+                        backgroundColor: "#38bdf8",
+                        color: "#0f172a",
+                        border: "none",
+                        borderRadius: 6,
+                        padding: "6px 12px",
+                        fontSize: 11.5,
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Remind →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+
+{/* --- QUOTEGEN UI --- */}
+            {appMode === "quote" && (
+              <div className="sg-card" style={{ marginTop: 20, border: "1px solid rgba(52, 211, 153, 0.2)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                  <span style={{ fontSize: 18 }}>📝</span>
+                  <h2 style={{ margin: 0, fontSize: 16, color: "#f8fafc" }}>QuoteGen: Client Request to Deposit</h2>
+                </div>
+                <p style={{ color: "#94a3b8", fontSize: 13, marginBottom: 16 }}>
+                  Paste the client's messy initial email here. Gemini will extract deliverables, estimate a total, and draft a 50% deposit invoice.
+                </p>
+                <textarea
+                  className="sg-textarea"
+                  placeholder="e.g., Hi, we need a simple React landing page built by next Friday with a contact form..."
+                  value={quoteInput}
+                  onChange={(e) => setQuoteInput(e.target.value)}
+                  style={{ minHeight: 120, marginBottom: 16, width: "100%", padding: 12, borderRadius: 8, background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.05)", color: "#f8fafc" }}
+                />
+                {error && <div style={{ color: "#f87171", backgroundColor: "rgba(248, 113, 113, 0.1)", padding: 10, borderRadius: 8, marginBottom: 16, fontSize: 13 }}>❌ Error: {error}</div>}
+                <button
+                  onClick={handleGenerateQuote}
+                  disabled={quoteBusy || !quoteInput.trim()}
+                  style={{
+                    backgroundColor: "#34d399",
+                    color: "#0f172a",
+                    border: "none",
+                    borderRadius: 8,
+                    padding: "11px 16px",
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    cursor: (quoteBusy || !quoteInput.trim()) ? "not-allowed" : "pointer",
+                    width: "100%",
+                    opacity: (quoteBusy || !quoteInput.trim()) ? 0.6 : 1
+                  }}
+                >
+                  {quoteBusy ? "⏳ Analyzing with Gemini..." : "✨ Analyze & Draft Deposit Invoice"}
+                </button>
+
+                {quoteResult && (
+                  <div style={{ marginTop: 20, padding: 16, backgroundColor: "rgba(52, 211, 153, 0.05)", borderRadius: 8, border: "1px solid rgba(52, 211, 153, 0.2)" }}>
+                    <h3 style={{ margin: "0 0 12px 0", fontSize: 14, color: "#34d399" }}>AI Quote Breakdown</h3>
+                    <p style={{ margin: "0 0 8px 0", fontSize: 13, color: "#cbd5e1" }}><strong>Deliverables:</strong> {quoteResult.deliverables?.join(", ")}</p>
+                    <p style={{ margin: "0 0 8px 0", fontSize: 13, color: "#cbd5e1" }}><strong>Estimated Total:</strong> ${quoteResult.estimated_total}</p>
+                    <p style={{ margin: "0 0 8px 0", fontSize: 13, color: "#cbd5e1" }}><strong>Deposit (50%):</strong> ${quoteResult.deposit_amount}</p>
+                    <p style={{ margin: "0 0 16px 0", fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>"{quoteResult.rationale}"</p>
+                    
+                    <button
+                      onClick={() => {
+                        // Package the Quote data into the exact format Step 3 expects!
+                        setScope({ 
+                          in_scope: false, 
+                          isQuote: true,
+                          extra_work: `50% Upfront Deposit: ${quoteResult.deliverables?.join(", ")}`,
+                          suggested_price_usd: quoteResult.deposit_amount
+                        });
+                        
+                        // Force the app to Step 3 and flip the UI mode
+                        setCurrentStep(3);
+                        setAppMode("scope");
+                      }}
+                      style={{
+                        backgroundColor: "#2563eb", color: "#fff", border: "none", borderRadius: 8, padding: "10px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", width: "100%"
+                      }}
+                    >
+                      🚀 Send Deposit to PayPal Billing
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* --- SCOPEGUARD WRAPPER --- */}
+            <div style={{ display: appMode === "scope" ? "block" : "none" }}>
+
         {/* Softer Stepper */}
         <div className="sg-stepper">
           {STEPS.map((s) => {
+            const isQuoteFlow = scope?.isQuote; // Check if this is a Deposit flow
+            
             const isActive = currentStep === s.id;
+            
+            // Hide completion checkmarks for Steps 1 & 2 if it's a quote
             const isCompleted =
-              (s.id === 1 && scope) ||
-              (s.id === 2 && scope) ||
+              (!isQuoteFlow && s.id === 1 && scope) ||
+              (!isQuoteFlow && s.id === 2 && scope) ||
               (s.id === 3 && sent);
-            const isAccessible =
-              s.id === 1 ||
-              (s.id === 2 && scope) ||
-              (s.id === 3 && canGoToBilling) ||
-              (s.id === 4 && sent);
+              
+            // Lock out Steps 1 & 2 entirely if it's a quote!
+            const isAccessible = isQuoteFlow
+              ? (s.id === 3 || (s.id === 4 && sent))
+              : (s.id === 1 || (s.id === 2 && scope) || (s.id === 3 && canGoToBilling) || (s.id === 4 && sent));
 
             return (
               <button
@@ -366,9 +694,35 @@ export default function App() {
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.03em" }}>
-                Contract Baseline
-              </label>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <label style={{ fontSize: 11.5, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.03em" }}>
+                  Contract Baseline
+                </label>
+                
+                {/* Hidden file input triggered by the button */}
+                <input 
+                  type="file" 
+                  accept=".txt,.pdf" 
+                  id="contract-upload" 
+                  style={{ display: "none" }} 
+                  onChange={handleFileUpload} 
+                />
+                <label 
+                  htmlFor="contract-upload"
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                    color: "#f8fafc",
+                    padding: "3px 8px",
+                    borderRadius: 4,
+                    fontSize: 11,
+                    cursor: "pointer",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  📁 Upload File (.txt / .pdf)
+                </label>
+              </div>
               <textarea
                 rows={4}
                 className="sg-textarea"
@@ -378,10 +732,28 @@ export default function App() {
               />
             </div>
 
-            <div style={{ marginBottom: 18 }}>
-              <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.03em" }}>
-                Incoming Client Message
-              </label>
+           <div style={{ marginBottom: 18 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <label style={{ fontSize: 11.5, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.03em" }}>
+                  Incoming Client Message
+                </label>
+                
+                <button 
+                  onClick={handleCheckWebhook}
+                  style={{
+                    backgroundColor: "rgba(16, 185, 129, 0.1)", // subtle green
+                    color: "#34d399",
+                    padding: "3px 8px",
+                    borderRadius: 4,
+                    fontSize: 11,
+                    cursor: "pointer",
+                    border: "1px solid rgba(16, 185, 129, 0.2)",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  ⚡ Sync Webhook
+                </button>
+              </div>
               <textarea
                 rows={3}
                 className="sg-textarea"
@@ -390,7 +762,6 @@ export default function App() {
                 placeholder="Paste client's requested changes or extra work..."
               />
             </div>
-
             <button
               onClick={handleCheck}
               disabled={!!busy || !contract || !message}
@@ -470,6 +841,21 @@ export default function App() {
               }}>
                 <strong style={{ color: "#38bdf8", display: "block", marginBottom: 2, fontSize: 11.5 }}>Audited Clause:</strong>
                 <em>"{scope.contract_clause}"</em>
+                
+                {/* --- NEW VERIFICATION BADGE --- */}
+                <div style={{ marginTop: 8 }}>
+                  {scope.clause_verified === true && (
+                    <span style={{ display: "inline-block", backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981", padding: "4px 8px", borderRadius: 4, fontSize: 11, fontWeight: "bold" }}>
+                      ✅ Verified word-for-word in contract
+                    </span>
+                  )}
+                  {scope.clause_verified === false && (
+                    <span style={{ display: "inline-block", backgroundColor: "rgba(239, 68, 68, 0.15)", color: "#ef4444", padding: "4px 8px", borderRadius: 4, fontSize: 11, fontWeight: "bold" }}>
+                      ⚠️ Quote not found word-for-word, please verify
+                    </span>
+                  )}
+                </div>
+                {/* ------------------------------ */}
               </div>
             )}
 
@@ -499,6 +885,72 @@ export default function App() {
                 </strong>
               </div>
             </div>
+
+            {/* NEW CLIENT COMMUNICATION BLOCK */}
+            {!scope.in_scope && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.03em" }}>
+                    CLIENT COMMUNICATION
+                  </span>
+                  <button
+                    onClick={handleDraftExplanation}
+                    disabled={!!busy}
+                    style={{
+                      background: "rgba(56, 189, 248, 0.1)",
+                      color: "#38bdf8",
+                      border: "1px solid rgba(56, 189, 248, 0.25)",
+                      borderRadius: 8,
+                      padding: "6px 12px",
+                      fontSize: 11.5,
+                      fontWeight: 500,
+                      cursor: busy ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {busy === "Drafting polite explanation..." ? "Drafting..." : "✍️ Draft Polite Reply"}
+                  </button>
+                </div>
+
+                {explanation && (
+                  <div style={{
+                    backgroundColor: "rgba(11, 15, 23, 0.65)",
+                    border: "1px solid rgba(255, 255, 255, 0.07)",
+                    borderRadius: 10,
+                    padding: 14,
+                    fontSize: 13,
+                    lineHeight: 1.6,
+                    color: "#cbd5e1",
+                  }}>
+                    <div style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+                      paddingBottom: 8,
+                      marginBottom: 8
+                    }}>
+                      <span style={{ color: "#f8fafc", fontWeight: 600 }}>Subject: {explanation.subject}</span>
+                      <button
+                        onClick={handleCopyExplanation}
+                        style={{
+                          background: copiedExp ? "rgba(52, 211, 153, 0.15)" : "rgba(255, 255, 255, 0.06)",
+                          color: copiedExp ? "#34d399" : "#cbd5e1",
+                          border: `1px solid ${copiedExp ? "rgba(52, 211, 153, 0.3)" : "rgba(255, 255, 255, 0.1)"}`,
+                          borderRadius: 6,
+                          padding: "3px 8px",
+                          fontSize: 11.5,
+                          cursor: "pointer",
+                          fontWeight: 500
+                        }}
+                      >
+                        {copiedExp ? "✓ Copied!" : "📋 Copy"}
+                      </button>
+                    </div>
+                    <div style={{ whiteSpace: "pre-wrap" }}>{explanation.body}</div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
               {!scope.in_scope && (
@@ -680,6 +1132,25 @@ export default function App() {
                       >
                         Refresh Status
                       </button>
+                      
+                      <button
+                        onClick={handleCancelInvoice}
+                        disabled={!!busy || status === "CANCELLED" || status === "PAID"}
+                        style={{
+                          marginLeft: 8,
+                          backgroundColor: "rgba(248, 113, 113, 0.1)",
+                          color: "#f87171",
+                          border: "1px solid rgba(248, 113, 113, 0.3)",
+                          borderRadius: 8,
+                          padding: "5px 11px",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: (busy || status === "CANCELLED" || status === "PAID") ? "not-allowed" : "pointer",
+                          opacity: (status === "CANCELLED" || status === "PAID") ? 0.5 : 1
+                        }}
+                      >
+                        🚫 Void
+                      </button>
                     </div>
 
                     {status && (
@@ -846,21 +1317,39 @@ export default function App() {
                   marginBottom: 8
                 }}>
                   <span style={{ color: "#f8fafc", fontWeight: 600 }}>Subject: {reminder.subject}</span>
-                  <button
-                    onClick={handleCopyEmail}
-                    style={{
-                      background: copied ? "rgba(52, 211, 153, 0.15)" : "rgba(255, 255, 255, 0.06)",
-                      color: copied ? "#34d399" : "#cbd5e1",
-                      border: `1px solid ${copied ? "rgba(52, 211, 153, 0.3)" : "rgba(255, 255, 255, 0.1)"}`,
-                      borderRadius: 6,
-                      padding: "3px 8px",
-                      fontSize: 11.5,
-                      cursor: "pointer",
-                      fontWeight: 500
-                    }}
-                  >
-                    {copied ? "✓ Copied!" : "📋 Copy"}
-                  </button>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      onClick={handleSendReminder}
+                      disabled={!!busy}
+                      style={{
+                        background: "rgba(37, 99, 235, 0.15)",
+                        color: "#60a5fa",
+                        border: "1px solid rgba(37, 99, 235, 0.3)",
+                        borderRadius: 6,
+                        padding: "3px 8px",
+                        fontSize: 11.5,
+                        cursor: busy ? "not-allowed" : "pointer",
+                        fontWeight: 500
+                      }}
+                    >
+                      {busy === "Sending reminder via PayPal..." ? "Sending..." : "📤 Send via PayPal"}
+                    </button>
+                    <button
+                      onClick={handleCopyEmail}
+                      style={{
+                        background: copied ? "rgba(52, 211, 153, 0.15)" : "rgba(255, 255, 255, 0.06)",
+                        color: copied ? "#34d399" : "#cbd5e1",
+                        border: `1px solid ${copied ? "rgba(52, 211, 153, 0.3)" : "rgba(255, 255, 255, 0.1)"}`,
+                        borderRadius: 6,
+                        padding: "3px 8px",
+                        fontSize: 11.5,
+                        cursor: "pointer",
+                        fontWeight: 500
+                      }}
+                    >
+                      {copied ? "✓ Copied!" : "📋 Copy"}
+                    </button>
+                  </div>
                 </div>
                 <div style={{ whiteSpace: "pre-wrap" }}>{reminder.body}</div>
               </div>
@@ -884,6 +1373,9 @@ export default function App() {
             </div>
           </div>
         )}
+        </div>
+        </>
+      )}
       </div>
     </div>
   );
