@@ -841,6 +841,21 @@ const handleFileUpload = async (e) => {
               }}>
                 <strong style={{ color: "#38bdf8", display: "block", marginBottom: 2, fontSize: 11.5 }}>Audited Clause:</strong>
                 <em>"{scope.contract_clause}"</em>
+                
+                {/* --- NEW VERIFICATION BADGE --- */}
+                <div style={{ marginTop: 8 }}>
+                  {scope.clause_verified === true && (
+                    <span style={{ display: "inline-block", backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981", padding: "4px 8px", borderRadius: 4, fontSize: 11, fontWeight: "bold" }}>
+                      ✅ Verified word-for-word in contract
+                    </span>
+                  )}
+                  {scope.clause_verified === false && (
+                    <span style={{ display: "inline-block", backgroundColor: "rgba(239, 68, 68, 0.15)", color: "#ef4444", padding: "4px 8px", borderRadius: 4, fontSize: 11, fontWeight: "bold" }}>
+                      ⚠️ Quote not found word-for-word, please verify
+                    </span>
+                  )}
+                </div>
+                {/* ------------------------------ */}
               </div>
             )}
 

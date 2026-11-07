@@ -266,7 +266,18 @@ app.post("/check-scope", async (req, res) => {
     if (!contract || !message) {
       return res.status(400).json({ error: "contract and message are required" });
     }
-    res.json(await checkScope(contract, message));
+    
+    // 1. Get the result from Gemini
+    const result = await checkScope(contract, message);
+    
+    // 2. Verify the quoted clause word-for-word against the uploaded contract
+    const normalize = (s) => String(s).toLowerCase().replace(/\s+/g, " ").trim();
+    result.clause_verified = result.contract_clause 
+      ? normalize(contract).includes(normalize(result.contract_clause)) 
+      : null;
+      
+    // 3. Send the verified result back to React
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
