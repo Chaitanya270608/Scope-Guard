@@ -1,6 +1,11 @@
 require("dotenv").config();
 const cors = require("cors");
 const express = require("express");
+const multer = require("multer");
+const pdf = require("pdf-parse");
+
+// Setup multer to store the uploaded file in memory temporarily
+const upload = multer({ storage: multer.memoryStorage() });
 const FREELANCER = {
   name: process.env.FREELANCER_NAME || "Independent Professional",
   hourlyRate: process.env.FREELANCER_RATE || 50, 
@@ -579,6 +584,30 @@ app.post("/generate-quote", async (req, res) => {
     const quoteData = await generateQuote(client_email);
     res.json(quoteData);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/parse-pdf", upload.single("contractFile"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    
+    const { PDFParse } = require("pdf-parse");
+    
+    // Convert the Node.js Buffer strictly into a Uint8Array
+    const uint8Array = new Uint8Array(req.file.buffer);
+    
+    // Initialize the parser with the converted data
+    const parser = new PDFParse(uint8Array);
+    
+    // Extract the text!
+    const result = await parser.getText();
+    
+    const extractedText = typeof result === "string" ? result : result.text;
+    
+    res.json({ text: extractedText });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -239,6 +239,42 @@ export default function App() {
     }
   };
 
+const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.type === "text/plain") {
+      // Handle standard TXT files instantly in the browser
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setContract(event.target.result);
+      };
+      reader.readAsText(file);
+    } else if (file.type === "application/pdf") {
+      // Handle PDFs via the backend endpoint
+      setContract("⏳ Extracting text from PDF, please wait...");
+      try {
+        const formData = new FormData();
+        formData.append("contractFile", file);
+
+        const res = await fetch("http://localhost:3000/parse-pdf", {
+          method: "POST",
+          body: formData
+        });
+        
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        
+        setContract(data.text);
+      } catch (err) {
+        alert("Failed to parse PDF: " + err.message);
+        setContract("");
+      }
+    } else {
+      alert("Please upload a .txt or .pdf file.");
+    }
+  };
+
   function handleReset() {
     setContract("");
     setMessage("");
@@ -643,9 +679,35 @@ export default function App() {
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.03em" }}>
-                Contract Baseline
-              </label>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <label style={{ fontSize: 11.5, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.03em" }}>
+                  Contract Baseline
+                </label>
+                
+                {/* Hidden file input triggered by the button */}
+                <input 
+                  type="file" 
+                  accept=".txt,.pdf" 
+                  id="contract-upload" 
+                  style={{ display: "none" }} 
+                  onChange={handleFileUpload} 
+                />
+                <label 
+                  htmlFor="contract-upload"
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                    color: "#f8fafc",
+                    padding: "3px 8px",
+                    borderRadius: 4,
+                    fontSize: 11,
+                    cursor: "pointer",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  📁 Upload File (.txt / .pdf)
+                </label>
+              </div>
               <textarea
                 rows={4}
                 className="sg-textarea"
