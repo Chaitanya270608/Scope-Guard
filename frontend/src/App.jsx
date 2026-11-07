@@ -162,6 +162,18 @@ export default function App() {
     });
   }
 
+  function handleCancelInvoice() {
+    if (!window.confirm("Are you sure you want to void this invoice? This action cannot be undone.")) return;
+    
+    run("Voiding invoice...", async () => {
+      const data = await api("/cancel-invoice", { invoice_id: invoiceId });
+      if (data.success) {
+        alert("Invoice successfully voided.");
+        setStatus("CANCELLED"); 
+      }
+    });
+  }
+
   function handleDraftExplanation() {
     run("Drafting polite explanation...", async () => {
       setExplanation(
@@ -871,6 +883,25 @@ export default function App() {
                         }}
                       >
                         Refresh Status
+                      </button>
+                      
+                      <button
+                        onClick={handleCancelInvoice}
+                        disabled={!!busy || status === "CANCELLED" || status === "PAID"}
+                        style={{
+                          marginLeft: 8,
+                          backgroundColor: "rgba(248, 113, 113, 0.1)",
+                          color: "#f87171",
+                          border: "1px solid rgba(248, 113, 113, 0.3)",
+                          borderRadius: 8,
+                          padding: "5px 11px",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: (busy || status === "CANCELLED" || status === "PAID") ? "not-allowed" : "pointer",
+                          opacity: (status === "CANCELLED" || status === "PAID") ? 0.5 : 1
+                        }}
+                      >
+                        🚫 Void
                       </button>
                     </div>
 

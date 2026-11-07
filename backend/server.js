@@ -516,4 +516,39 @@ app.get("/list-invoices", async (req, res) => {
   }
 });
 
+
+app.post("/cancel-invoice", async (req, res) => {
+  try {
+    const { invoice_id } = req.body;
+    if (!invoice_id) return res.status(400).json({ error: "invoice_id required" });
+
+    const token = await getAccessToken();
+    const response = await fetch(
+      `${BASE_URL}/v2/invoicing/invoices/${invoice_id}/cancel`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          subject: "Invoice Cancelled",
+          note: "This invoice has been voided because the requested out-of-scope work was withdrawn.",
+          send_to_invoicer: false,
+          send_to_recipient: true
+        }),
+      }
+    );
+
+    if (response.status !== 204 && response.status !== 200) {
+      const data = await response.json();
+      return res.status(response.status).json(data);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(3000, () => console.log("Server running on port 3000"));
