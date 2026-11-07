@@ -275,6 +275,21 @@ const handleFileUpload = async (e) => {
     }
   };
 
+  const handleCheckWebhook = async () => {
+    try {
+      const res = await fetch("http://localhost:3000/webhook/latest");
+      const data = await res.json();
+      
+      if (data.message) {
+        setMessage(data.message); // Auto-fill the message box!
+      } else {
+        alert("No new messages found in the webhook trap.");
+      }
+    } catch (err) {
+      console.error("Webhook fetch error:", err);
+    }
+  };
+
   function handleReset() {
     setContract("");
     setMessage("");
@@ -717,10 +732,28 @@ const handleFileUpload = async (e) => {
               />
             </div>
 
-            <div style={{ marginBottom: 18 }}>
-              <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.03em" }}>
-                Incoming Client Message
-              </label>
+           <div style={{ marginBottom: 18 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <label style={{ fontSize: 11.5, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.03em" }}>
+                  Incoming Client Message
+                </label>
+                
+                <button 
+                  onClick={handleCheckWebhook}
+                  style={{
+                    backgroundColor: "rgba(16, 185, 129, 0.1)", // subtle green
+                    color: "#34d399",
+                    padding: "3px 8px",
+                    borderRadius: 4,
+                    fontSize: 11,
+                    cursor: "pointer",
+                    border: "1px solid rgba(16, 185, 129, 0.2)",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  ⚡ Sync Webhook
+                </button>
+              </div>
               <textarea
                 rows={3}
                 className="sg-textarea"
@@ -729,7 +762,6 @@ const handleFileUpload = async (e) => {
                 placeholder="Paste client's requested changes or extra work..."
               />
             </div>
-
             <button
               onClick={handleCheck}
               disabled={!!busy || !contract || !message}

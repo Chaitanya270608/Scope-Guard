@@ -3,6 +3,8 @@ const cors = require("cors");
 const express = require("express");
 const multer = require("multer");
 const pdf = require("pdf-parse");
+// Temporary memory to store the latest webhook message
+let latestWebhookMessage = "";
 
 // Setup multer to store the uploaded file in memory temporarily
 const upload = multer({ storage: multer.memoryStorage() });
@@ -610,6 +612,26 @@ app.post("/parse-pdf", upload.single("contractFile"), async (req, res) => {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// 1. The Webhook Receiver (Zapier/Slack will POST to this)
+app.post("/webhook/intake", (req, res) => {
+  const { message } = req.body;
+  
+  if (!message) return res.status(400).json({ error: "No message provided" });
+  
+  // Save it to memory
+  latestWebhookMessage = message;
+  console.log("🔔 WEBHOOK RECEIVED:", message);
+  
+  res.json({ success: true, status: "Message caught successfully!" });
+});
+
+// 2. The Frontend Fetcher (React will call this to check for new messages)
+app.get("/webhook/latest", (req, res) => {
+  res.json({ message: latestWebhookMessage });
+  // Optional: clear it after reading so it doesn't stay there forever
+  latestWebhookMessage = ""; 
 });
 
 app.listen(3000, () => console.log("Server running on port 3000"));
