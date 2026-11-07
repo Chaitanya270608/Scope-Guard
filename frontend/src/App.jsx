@@ -59,6 +59,8 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [explanation, setExplanation] = useState(null);
   const [copiedExp, setCopiedExp] = useState(false); 
+  const [invoices, setInvoices] = useState([]);
+  const [showLedger, setShowLedger] = useState(false);
 
   async function run(label, action) {
     setBusy(label);
@@ -180,6 +182,22 @@ export default function App() {
     navigator.clipboard.writeText(fullText);
     setCopiedExp(true);
     setTimeout(() => setCopiedExp(false), 2000);
+  }
+
+  function handleFetchInvoices() {
+    run("Fetching invoice ledger...", async () => {
+      const data = await api("/list-invoices");
+      setInvoices(data.invoices || []);
+      setShowLedger(true);
+    });
+  }
+
+  function handleSelectInvoice(inv) {
+    setInvoiceId(inv.id);
+    setSent(true); 
+    setStatus(inv.status); 
+    setShowLedger(false);
+    setCurrentStep(4); // Jump directly to the Chaser Engine
   }
 
   function handleReset() {
@@ -338,6 +356,23 @@ export default function App() {
             <p style={{ color: "#94a3b8", fontSize: 13, margin: "3px 0 0 0" }}>
               AI Scope Creep Protector & Automated PayPal Billing Agent
             </p>
+            <button
+              onClick={handleFetchInvoices}
+              disabled={!!busy}
+              style={{
+                marginTop: 14,
+                background: "rgba(255, 255, 255, 0.05)",
+                color: "#e2e8f0",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: 8,
+                padding: "6px 14px",
+                fontSize: 12,
+                cursor: busy ? "not-allowed" : "pointer",
+                fontWeight: 500
+              }}
+            >
+              {busy === "Fetching invoice ledger..." ? "Loading..." : "🧾 View Invoice Ledger"}
+            </button>
           </div>
           <div style={{
             display: "inline-flex",
@@ -356,6 +391,59 @@ export default function App() {
             PayPal Sandbox: Connected
           </div>
         </header>
+
+        {showLedger ? (
+          <div className="sg-card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#f8fafc" }}>RECENT INVOICES</span>
+              <button
+                onClick={() => setShowLedger(false)}
+                style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 12 }}
+              >
+                ✕ Close
+              </button>
+            </div>
+            
+            {invoices.length === 0 ? (
+              <div style={{ color: "#94a3b8", fontSize: 13, textAlign: "center", padding: "20px 0" }}>No invoices found.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {invoices.map((inv) => (
+                  <div key={inv.id} style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    backgroundColor: "rgba(11, 15, 23, 0.5)",
+                    border: "1px solid rgba(255, 255, 255, 0.05)",
+                    padding: "12px 16px",
+                    borderRadius: 8
+                  }}>
+                    <div>
+                      <strong style={{ color: "#e2e8f0", fontSize: 13, display: "block" }}>{inv.id}</strong>
+                      <span style={{ color: "#94a3b8", fontSize: 11 }}>Status: {inv.status}</span>
+                    </div>
+                    <button
+                      onClick={() => handleSelectInvoice(inv)}
+                      style={{
+                        backgroundColor: "#38bdf8",
+                        color: "#0f172a",
+                        border: "none",
+                        borderRadius: 6,
+                        padding: "6px 12px",
+                        fontSize: 11.5,
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Remind →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
 
         {/* Softer Stepper */}
         <div className="sg-stepper">
@@ -1006,6 +1094,9 @@ export default function App() {
             </div>
           </div>
         )}
+        
+        </>
+      )}
       </div>
     </div>
   );

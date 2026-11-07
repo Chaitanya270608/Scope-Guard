@@ -496,4 +496,24 @@ Reply with JSON only, in exactly this shape:
   }
 });
 
+app.get("/list-invoices", async (req, res) => {
+  try {
+    const token = await getAccessToken();
+    // Fetch the 20 most recent invoices
+    const response = await fetch(
+      BASE_URL + "/v2/invoicing/invoices?page_size=20",
+      { headers: { Authorization: "Bearer " + token } }
+    );
+
+    const data = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json(data);
+    }
+
+    res.json({ invoices: data.items || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(3000, () => console.log("Server running on port 3000"));
