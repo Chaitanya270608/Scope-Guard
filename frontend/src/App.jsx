@@ -61,6 +61,10 @@ export default function App() {
   const [copiedExp, setCopiedExp] = useState(false); 
   const [invoices, setInvoices] = useState([]);
   const [showLedger, setShowLedger] = useState(false);
+  const [appMode, setAppMode] = useState("scope"); // "scope" or "quote"
+  const [quoteInput, setQuoteInput] = useState("");
+  const [quoteResult, setQuoteResult] = useState(null);
+  const [quoteBusy, setQuoteBusy] = useState(false);
 
   async function run(label, action) {
     setBusy(label);
@@ -211,6 +215,29 @@ export default function App() {
     setShowLedger(false);
     setCurrentStep(4); // Jump directly to the Chaser Engine
   }
+
+  const handleGenerateQuote = async () => {
+    if (!quoteInput.trim()) return;
+    setQuoteBusy(true);
+    setError("");
+    setQuoteResult(null);
+
+    try {
+      const res = await fetch("http://localhost:3000/generate-quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_email: quoteInput })
+      });
+      const data = await res.json();
+      
+      if (data.error) throw new Error(data.error);
+      setQuoteResult(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setQuoteBusy(false);
+    }
+  };
 
   function handleReset() {
     setContract("");
@@ -368,6 +395,41 @@ export default function App() {
             <p style={{ color: "#94a3b8", fontSize: 13, margin: "3px 0 0 0" }}>
               AI Scope Creep Protector & Automated PayPal Billing Agent
             </p>
+            {/* App Mode Toggle */}
+            <div style={{ display: "flex", backgroundColor: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 4, width: "fit-content", marginTop: 14 }}>
+              <button
+                onClick={() => setAppMode("scope")}
+                style={{
+                  backgroundColor: appMode === "scope" ? "#38bdf8" : "transparent",
+                  color: appMode === "scope" ? "#0f172a" : "#94a3b8",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "6px 16px",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.2s"
+                }}
+              >
+                🛡️ ScopeGuard
+              </button>
+              <button
+                onClick={() => setAppMode("quote")}
+                style={{
+                  backgroundColor: appMode === "quote" ? "#34d399" : "transparent",
+                  color: appMode === "quote" ? "#0f172a" : "#94a3b8",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "6px 16px",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.2s"
+                }}
+              >
+                📝 QuoteGen
+              </button>
+            </div>
             <button
               onClick={handleFetchInvoices}
               disabled={!!busy}
@@ -457,19 +519,96 @@ export default function App() {
         ) : (
           <>
 
+{/* --- QUOTEGEN UI --- */}
+            {appMode === "quote" && (
+              <div className="sg-card" style={{ marginTop: 20, border: "1px solid rgba(52, 211, 153, 0.2)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                  <span style={{ fontSize: 18 }}>📝</span>
+                  <h2 style={{ margin: 0, fontSize: 16, color: "#f8fafc" }}>QuoteGen: Client Request to Deposit</h2>
+                </div>
+                <p style={{ color: "#94a3b8", fontSize: 13, marginBottom: 16 }}>
+                  Paste the client's messy initial email here. Gemini will extract deliverables, estimate a total, and draft a 50% deposit invoice.
+                </p>
+                <textarea
+                  className="sg-textarea"
+                  placeholder="e.g., Hi, we need a simple React landing page built by next Friday with a contact form..."
+                  value={quoteInput}
+                  onChange={(e) => setQuoteInput(e.target.value)}
+                  style={{ minHeight: 120, marginBottom: 16, width: "100%", padding: 12, borderRadius: 8, background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.05)", color: "#f8fafc" }}
+                />
+                {error && <div style={{ color: "#f87171", backgroundColor: "rgba(248, 113, 113, 0.1)", padding: 10, borderRadius: 8, marginBottom: 16, fontSize: 13 }}>❌ Error: {error}</div>}
+                <button
+                  onClick={handleGenerateQuote}
+                  disabled={quoteBusy || !quoteInput.trim()}
+                  style={{
+                    backgroundColor: "#34d399",
+                    color: "#0f172a",
+                    border: "none",
+                    borderRadius: 8,
+                    padding: "11px 16px",
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    cursor: (quoteBusy || !quoteInput.trim()) ? "not-allowed" : "pointer",
+                    width: "100%",
+                    opacity: (quoteBusy || !quoteInput.trim()) ? 0.6 : 1
+                  }}
+                >
+                  {quoteBusy ? "⏳ Analyzing with Gemini..." : "✨ Analyze & Draft Deposit Invoice"}
+                </button>
+
+                {quoteResult && (
+                  <div style={{ marginTop: 20, padding: 16, backgroundColor: "rgba(52, 211, 153, 0.05)", borderRadius: 8, border: "1px solid rgba(52, 211, 153, 0.2)" }}>
+                    <h3 style={{ margin: "0 0 12px 0", fontSize: 14, color: "#34d399" }}>AI Quote Breakdown</h3>
+                    <p style={{ margin: "0 0 8px 0", fontSize: 13, color: "#cbd5e1" }}><strong>Deliverables:</strong> {quoteResult.deliverables?.join(", ")}</p>
+                    <p style={{ margin: "0 0 8px 0", fontSize: 13, color: "#cbd5e1" }}><strong>Estimated Total:</strong> ${quoteResult.estimated_total}</p>
+                    <p style={{ margin: "0 0 8px 0", fontSize: 13, color: "#cbd5e1" }}><strong>Deposit (50%):</strong> ${quoteResult.deposit_amount}</p>
+                    <p style={{ margin: "0 0 16px 0", fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>"{quoteResult.rationale}"</p>
+                    
+                    <button
+                      onClick={() => {
+                        // Package the Quote data into the exact format Step 3 expects!
+                        setScope({ 
+                          in_scope: false, 
+                          isQuote: true,
+                          extra_work: `50% Upfront Deposit: ${quoteResult.deliverables?.join(", ")}`,
+                          suggested_price_usd: quoteResult.deposit_amount
+                        });
+                        
+                        // Force the app to Step 3 and flip the UI mode
+                        setCurrentStep(3);
+                        setAppMode("scope");
+                      }}
+                      style={{
+                        backgroundColor: "#2563eb", color: "#fff", border: "none", borderRadius: 8, padding: "10px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", width: "100%"
+                      }}
+                    >
+                      🚀 Send Deposit to PayPal Billing
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* --- SCOPEGUARD WRAPPER --- */}
+            <div style={{ display: appMode === "scope" ? "block" : "none" }}>
+
         {/* Softer Stepper */}
         <div className="sg-stepper">
           {STEPS.map((s) => {
+            const isQuoteFlow = scope?.isQuote; // Check if this is a Deposit flow
+            
             const isActive = currentStep === s.id;
+            
+            // Hide completion checkmarks for Steps 1 & 2 if it's a quote
             const isCompleted =
-              (s.id === 1 && scope) ||
-              (s.id === 2 && scope) ||
+              (!isQuoteFlow && s.id === 1 && scope) ||
+              (!isQuoteFlow && s.id === 2 && scope) ||
               (s.id === 3 && sent);
-            const isAccessible =
-              s.id === 1 ||
-              (s.id === 2 && scope) ||
-              (s.id === 3 && canGoToBilling) ||
-              (s.id === 4 && sent);
+              
+            // Lock out Steps 1 & 2 entirely if it's a quote!
+            const isAccessible = isQuoteFlow
+              ? (s.id === 3 || (s.id === 4 && sent))
+              : (s.id === 1 || (s.id === 2 && scope) || (s.id === 3 && canGoToBilling) || (s.id === 4 && sent));
 
             return (
               <button
@@ -1125,7 +1264,7 @@ export default function App() {
             </div>
           </div>
         )}
-        
+        </div>
         </>
       )}
       </div>

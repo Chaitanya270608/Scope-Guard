@@ -551,4 +551,36 @@ app.post("/cancel-invoice", async (req, res) => {
   }
 });
 
+async function generateQuote(client_email) {
+  const prompt = `You are an expert freelance project manager. Read this initial inquiry email from a client:
+"${client_email}"
+
+1. Extract the core deliverables they are asking for.
+2. Estimate a reasonable total project cost in USD (use your best judgment based on standard freelance rates, e.g., $50-$100/hr).
+3. Calculate a 50% upfront deposit amount.
+4. Provide a short, professional rationale for the estimate.
+
+Respond ONLY in valid JSON matching this exact schema:
+{
+  "deliverables": ["Deliverable 1", "Deliverable 2"],
+  "estimated_total": 1500,
+  "deposit_amount": 750,
+  "rationale": "Brief explanation of the pricing."
+}`;
+
+  return await askGemini(prompt);
+}
+
+app.post("/generate-quote", async (req, res) => {
+  try {
+    const { client_email } = req.body;
+    if (!client_email) return res.status(400).json({ error: "client_email is required" });
+
+    const quoteData = await generateQuote(client_email);
+    res.json(quoteData);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(3000, () => console.log("Server running on port 3000"));
