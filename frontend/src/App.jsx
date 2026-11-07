@@ -57,6 +57,8 @@ export default function App() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [explanation, setExplanation] = useState(null);
+  const [copiedExp, setCopiedExp] = useState(false); 
 
   async function run(label, action) {
     setBusy(label);
@@ -80,6 +82,7 @@ export default function App() {
       setSent(false);
       setStatus(null);
       setReminder(null);
+      setExplanation(null);
       const data = await api("/check-scope", { contract, message });
       setScope(data);
       setWork(data.extra_work || "");
@@ -157,6 +160,28 @@ export default function App() {
     });
   }
 
+  function handleDraftExplanation() {
+    run("Drafting polite explanation...", async () => {
+      setExplanation(
+        await api("/draft-explanation", {
+          message,
+          extra_work: work,
+          price: Number(price),
+          freelancer_name: freelancerName,
+          client_name: clientName,
+        })
+      );
+    });
+  }
+
+  function handleCopyExplanation() {
+    if (!explanation || !explanation.body) return;
+    const fullText = `Subject: ${explanation.subject}\n\n${explanation.body}`;
+    navigator.clipboard.writeText(fullText);
+    setCopiedExp(true);
+    setTimeout(() => setCopiedExp(false), 2000);
+  }
+
   function handleReset() {
     setContract("");
     setMessage("");
@@ -170,6 +195,7 @@ export default function App() {
     setFreelancerName("");
     setClientName("");
     setReminder(null);
+    setExplanation(null);
     setError("");
     setCurrentStep(1);
   }
@@ -511,6 +537,72 @@ export default function App() {
                 </strong>
               </div>
             </div>
+
+            {/* NEW CLIENT COMMUNICATION BLOCK */}
+            {!scope.in_scope && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.03em" }}>
+                    CLIENT COMMUNICATION
+                  </span>
+                  <button
+                    onClick={handleDraftExplanation}
+                    disabled={!!busy}
+                    style={{
+                      background: "rgba(56, 189, 248, 0.1)",
+                      color: "#38bdf8",
+                      border: "1px solid rgba(56, 189, 248, 0.25)",
+                      borderRadius: 8,
+                      padding: "6px 12px",
+                      fontSize: 11.5,
+                      fontWeight: 500,
+                      cursor: busy ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {busy === "Drafting polite explanation..." ? "Drafting..." : "✍️ Draft Polite Reply"}
+                  </button>
+                </div>
+
+                {explanation && (
+                  <div style={{
+                    backgroundColor: "rgba(11, 15, 23, 0.65)",
+                    border: "1px solid rgba(255, 255, 255, 0.07)",
+                    borderRadius: 10,
+                    padding: 14,
+                    fontSize: 13,
+                    lineHeight: 1.6,
+                    color: "#cbd5e1",
+                  }}>
+                    <div style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+                      paddingBottom: 8,
+                      marginBottom: 8
+                    }}>
+                      <span style={{ color: "#f8fafc", fontWeight: 600 }}>Subject: {explanation.subject}</span>
+                      <button
+                        onClick={handleCopyExplanation}
+                        style={{
+                          background: copiedExp ? "rgba(52, 211, 153, 0.15)" : "rgba(255, 255, 255, 0.06)",
+                          color: copiedExp ? "#34d399" : "#cbd5e1",
+                          border: `1px solid ${copiedExp ? "rgba(52, 211, 153, 0.3)" : "rgba(255, 255, 255, 0.1)"}`,
+                          borderRadius: 6,
+                          padding: "3px 8px",
+                          fontSize: 11.5,
+                          cursor: "pointer",
+                          fontWeight: 500
+                        }}
+                      >
+                        {copiedExp ? "✓ Copied!" : "📋 Copy"}
+                      </button>
+                    </div>
+                    <div style={{ whiteSpace: "pre-wrap" }}>{explanation.body}</div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
               {!scope.in_scope && (

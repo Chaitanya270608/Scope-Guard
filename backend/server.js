@@ -462,4 +462,38 @@ app.post("/send-paypal-reminder", async (req, res) => {
   }
 });
 
+app.post("/draft-explanation", async (req, res) => {
+  try {
+    const { message, extra_work, price, freelancer_name, client_name } = req.body || {};
+    if (!extra_work) {
+      return res.status(400).json({ error: "extra_work is required" });
+    }
+
+    const greeting = client_name ? "Hi " + client_name + "," : "Hello,";
+    const signature = freelancer_name || FREELANCER.name;
+
+    const prompt = `Write an email from a freelancer to a client.
+The client asked for extra work that is out of scope.
+
+Client's request: "${message}"
+Out of scope work: "${extra_work}"
+Extra cost: $${price} USD
+
+Style: Professional, polite, but firm. 
+Acknowledge the request, gently explain it falls outside the original contract scope, say you are happy to do it, and let them know you will send a separate invoice for $${price} USD for this change order.
+
+Start exactly with: ${greeting}
+Sign off exactly with: Best regards,\n${signature}
+Do NOT use placeholders.
+
+Reply with JSON only, in exactly this shape:
+{"subject": "email subject line", "body": "the full email text"}`;
+
+    const email = await askGemini(prompt);
+    res.json(email);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(3000, () => console.log("Server running on port 3000"));
