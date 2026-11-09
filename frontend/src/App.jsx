@@ -65,6 +65,7 @@ export default function App() {
   const [quoteInput, setQuoteInput] = useState("");
   const [quoteResult, setQuoteResult] = useState(null);
   const [quoteBusy, setQuoteBusy] = useState(false);
+  const [hours, setHours] = useState("");
 
   async function run(label, action) {
     setBusy(label);
@@ -93,6 +94,7 @@ export default function App() {
       setScope(data);
       setWork(data.extra_work || "");
       setPrice(data.suggested_price_usd > 0 ? String(data.suggested_price_usd) : "");
+      setHours(data.hours > 0 ? String(data.hours) : "");
       setCurrentStep(2);
     });
   }
@@ -101,10 +103,8 @@ export default function App() {
     run("Creating PayPal draft invoice...", async () => {
       const data = await api("/create-invoice", {
         extra_work: work,
-        hours: scope ? scope.hours : 0,
-        reason: override
-          ? "Additional work requested by the client"
-          : scope.reason,
+        hours: Number(hours),
+        reason: override ? "Additional work requested by the client" : scope.reason,
         price: Number(price),
       });
       setInvoiceId(data.invoice.invoice_id);
@@ -1017,7 +1017,7 @@ const handleFileUpload = async (e) => {
           </div>
         )}
 
-        {/* STEP 3: PayPal Billing View */}
+{/* STEP 3: PayPal Billing View */}
         {currentStep === 3 && (
           <div className="sg-card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -1037,32 +1037,26 @@ const handleFileUpload = async (e) => {
               {override ? "Discretionary Invoice Builder" : "Scope Amendment Invoice"}
             </h3>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: 12, marginBottom: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 140px", gap: 12, marginBottom: 14 }}>
               <div>
                 <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.03em" }}>
                   Deliverable Description
                 </label>
-                <input
-                  className="sg-input"
-                  value={work}
-                  onChange={(e) => setWork(e.target.value)}
-                  placeholder="Describe billable deliverables..."
-                  disabled={!!invoiceId}
-                />
+                <input className="sg-input" value={work} onChange={(e) => setWork(e.target.value)} disabled={!!invoiceId} />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.03em" }}>
+                  Hours
+                </label>
+                <input type="number" className="sg-input" value={hours} onChange={(e) => setHours(e.target.value)} disabled={!!invoiceId} />
               </div>
 
               <div>
                 <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.03em" }}>
                   Price (USD)
                 </label>
-                <input
-                  type="number"
-                  className="sg-input"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  placeholder="0.00"
-                  disabled={!!invoiceId}
-                />
+                <input type="number" className="sg-input" value={price} onChange={(e) => setPrice(e.target.value)} disabled={!!invoiceId} />
               </div>
             </div>
 
