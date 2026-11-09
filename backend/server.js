@@ -195,7 +195,7 @@ async function createDraftInvoice(scope, clientEmail) {
   const hours = Number(scope.hours);
   const rate = hours > 0 ? Math.round((price / hours) * 100) / 100 : 0;
   // Show "hours x rate" only when it multiplies back to the exact price
-  const hourly = hours > 0 && Math.abs(rate * hours - price) < 0.005;
+  const hourly = hours > 0 && Math.abs(FREELANCER.hourlyRate * hours - price) < 0.005;
 
   const item = hourly
     ? {
