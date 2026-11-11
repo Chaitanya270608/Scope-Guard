@@ -193,4 +193,4 @@ MIT (see the LICENSE file).
 ## Author
 
 Built by Chaitanya Rao for the PayPal AI Hackathon.
-Demo video: [add the YouTube link here]
+Demo video: https://youtu.be/7LGxAzkCpfM?si=U748KFNaOFHjbYJ7
