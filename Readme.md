@@ -192,5 +192,5 @@ MIT (see the LICENSE file).
 
 ## Author
 
-Built by Triple Threat for the PayPal AI Hackathon.
+Built by Chaitanya Rao for the PayPal AI Hackathon.
 Demo video: [add the YouTube link here]

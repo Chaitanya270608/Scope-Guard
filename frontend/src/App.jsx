@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const API = "https://scope-guard-kq1u.onrender.com";
+const API = "http://localhost:3000";
 
 async function api(path, body) {
   const options = body
